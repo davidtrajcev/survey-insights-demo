@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ title }}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <header class="topbar">
+        <div>
+            <h1>Survey Insights Demo</h1>
+            <p>Privacy-safe employee survey analytics</p>
+        </div>
+        <nav>
+            <a href="/">Overview</a>
+            {% if not current_user %}
+                <a href="/login">Mock SSO login</a>
+            {% else %}
+                {% if not current_user.is_pc_admin %}
+                    <a href="/me">My area</a>
+                {% endif %}
+                {% if current_user.is_manager or current_user.is_pc_admin %}
+                    <a href="/managers">Manager dashboards</a>
+                {% endif %}
+                {% if current_user.is_pc_admin %}
+                    <a href="/admin">P&amp;C admin</a>
+                {% endif %}
+                <span class="signed-in">Signed in as {{ current_user.full_name }}</span>
+                <a href="/logout">Sign out</a>
+            {% endif %}
+        </nav>
+    </header>
+
+    <main class="container">
+        {% block content %}{% endblock %}
+    </main>
+</body>
+</html>

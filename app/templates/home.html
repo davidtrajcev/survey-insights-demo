@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="card">
+    <h2>Demo overview</h2>
+
+    <p>
+        This demo shows how an internal survey platform can collect employee feedback,
+        preserve anonymity, respect manager hierarchy, and show trends over time.
+    </p>
+
+    <div class="grid">
+        <div class="info-box">
+            <h3>Org-aware reporting</h3>
+            <p>
+                Managers will see their own team and all teams below them in the org tree.
+            </p>
+        </div>
+
+        <div class="info-box">
+            <h3>Historical org snapshots</h3>
+            <p>
+                Survey results will stay connected to the org structure from the time of the survey.
+            </p>
+        </div>
+
+        <div class="info-box">
+            <h3>Anonymity threshold</h3>
+            <p>
+                Teams with fewer than 4 respondents will be hidden in the manager dashboard.
+            </p>
+        </div>
+
+        <div class="info-box">
+            <h3>Trends over time</h3>
+            <p>
+                Results will show movement across annual, half-year, and pulse survey cycles.
+            </p>
+        </div>
+    </div>
+
+    <div class="next-section">
+        <h3>MVP assumptions</h3>
+        <ul>
+            <li>Company SSO is used for authentication, eligibility, and duplicate-submission prevention.</li>
+            <li>Responses are stored separately from employee identity and are only linked to the survey cycle and org snapshot unit.</li>
+            <li>Every survey cycle uses a frozen org snapshot so org changes do not rewrite historical results.</li>
+            <li>Manager dashboards consume privacy-safe aggregates, not raw responses.</li>
+            <li>Teams with fewer than 4 respondents are hidden; production would add stronger secondary suppression for inference risks.</li>
+        </ul>
+    </div>
+
+    <div class="next-section">
+        <h3>Try the SSO-based flow</h3>
+        <p>
+            Start with the mocked company SSO screen. In production this would be Entra ID / OIDC;
+            in the demo you choose a seeded employee or manager.
+        </p>
+        <a class="button-link" href="/login">Open mock SSO login</a>
+        <a class="button-link secondary" href="/managers">Open manager dashboards directly</a>
+        <a class="button-link secondary" href="/admin">Open P&amp;C admin</a>
+    </div>
+</section>
+{% endblock %}

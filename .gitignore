@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# App data — regenerate with: python -m app.seed
+*.db
+*.sqlite3
+
+# OS / editor
+.DS_Store
+
+# Merge / patch artifacts
+*.orig
+*.rej

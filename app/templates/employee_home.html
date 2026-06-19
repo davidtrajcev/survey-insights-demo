@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="card">
+    <div class="page-heading">
+        <div>
+            <p class="eyebrow">Employee survey area</p>
+            <h2>{{ current_user.full_name }}</h2>
+            <p>
+                This page represents the employee experience after company SSO login.
+                Choose an eligible survey below to submit a response through the mocked SSO flow.
+            </p>
+        </div>
+    </div>
+
+    <div class="policy-banner">
+        <div>
+            <strong>Why login is required</strong>
+            <p>
+                The app uses SSO to check survey eligibility, find the correct org snapshot unit,
+                and prevent duplicate submissions.
+            </p>
+        </div>
+        <div>
+            <strong>How anonymity is protected</strong>
+            <p>
+                The submitted response is stored separately from this participant record.
+                Manager dashboards only read aggregated anonymous responses.
+            </p>
+        </div>
+    </div>
+
+    <section class="section-card">
+        <h3>My survey eligibility</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Survey cycle</th>
+                    <th>Org snapshot unit</th>
+                    <th>Status</th>
+                    <th>Next step</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in participant_rows %}
+                <tr>
+                    <td>{{ row.survey_cycle.name }}</td>
+                    <td>{{ row.org_unit_path }}</td>
+                    {% if row.has_submitted %}
+                        <td><span class="status-pill visible">Submitted</span></td>
+                        <td class="muted-cell">Already submitted</td>
+                    {% else %}
+                        <td><span class="status-pill hidden">Not submitted</span></td>
+                        <td><a class="button-link table-action" href="/survey/{{ row.participant_id }}">Open survey</a></td>
+                    {% endif %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </section>
+</section>
+{% endblock %}

@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="dashboard-header">
+    <div>
+        <p class="eyebrow">Manager dashboard</p>
+        <h2>{{ manager.full_name }}</h2>
+        <p>
+            Requested survey: {{ selected_cycle.name }} ·
+            Current access scope: {{ viewer_org_unit_path }} ·
+            Requested manager scope: {{ current_target_org_unit_path }}
+        </p>
+    </div>
+
+    <form class="selector-form" method="get" action="/manager/{{ manager.id }}">
+        <label for="cycle_id">Survey cycle</label>
+        <select id="cycle_id" name="cycle_id" onchange="this.form.submit()">
+            {% for cycle in cycles %}
+            <option value="{{ cycle.id }}" {% if cycle.id == selected_cycle.id %}selected{% endif %}>
+                {{ cycle.name }}
+            </option>
+            {% endfor %}
+        </select>
+    </form>
+</section>
+
+<section class="privacy-block-card">
+    <p class="eyebrow">Dashboard hidden by cross-dashboard suppression</p>
+    <h2>This standalone dashboard is hidden for this cycle</h2>
+
+    <p>
+        {{ privacy_block.message }}
+    </p>
+
+    <div class="privacy-block-grid">
+        <div>
+            <strong>Viewer's broader scope</strong>
+            <span>{{ privacy_block.viewer_scope_name }}</span>
+        </div>
+        <div>
+            <strong>Requested dashboard</strong>
+            <span>{{ privacy_block.requested_org_unit_name }}</span>
+        </div>
+        <div>
+            <strong>Suppressed branch</strong>
+            <span>{{ privacy_block.blocked_org_unit_name }}</span>
+        </div>
+        <div>
+            <strong>Reason</strong>
+            <span>{{ privacy_block.reason }}</span>
+        </div>
+    </div>
+
+    {% if privacy_block.privacy_note %}
+    <p class="muted-text">{{ privacy_block.privacy_note }}</p>
+    {% endif %}
+
+    <p class="muted-text">
+        This is the important edge case: hiding a sibling in the parent table is not enough
+        if the same viewer can open that sibling's own dashboard. The suppression mask has
+        to apply across every dashboard the viewer can navigate to for the same cycle.
+    </p>
+
+    <div class="admin-actions">
+        <a class="secondary-button" href="/me">Back to my dashboard</a>
+        <a class="secondary-button" href="/managers">Accessible dashboards</a>
+    </div>
+</section>
+
+<section class="card section-card">
+    <h3>Design note</h3>
+    <p>{{ access_model_note }}</p>
+    <ul class="talking-points">
+        <li>The manager may operationally own a child team, but survey visibility can still be suppressed for privacy.</li>
+        <li>Primary suppression hides teams with fewer than 4 respondents.</li>
+        <li>Secondary suppression hides another sibling to prevent subtraction.</li>
+        <li>Cross-dashboard suppression prevents navigating directly to the hidden sibling's dashboard.</li>
+    </ul>
+</section>
+{% endblock %}

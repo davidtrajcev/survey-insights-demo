@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="card">
+    <div class="page-heading">
+        <div>
+            {% if already_submitted %}
+                <p class="eyebrow">Duplicate submission prevented</p>
+                <h2>Survey already submitted</h2>
+                <p>
+                    Your SSO participant record shows that this survey has already been completed.
+                </p>
+            {% else %}
+                <p class="eyebrow">Survey submitted</p>
+                <h2>Thank you for your feedback</h2>
+                <p>
+                    Your anonymous response has been stored for {{ participant.survey_cycle.name }}.
+                </p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="policy-banner">
+        <div>
+            <strong>Participant record</strong>
+            <p>
+                Your participant record is now marked as submitted so the app can prevent duplicate answers.
+            </p>
+        </div>
+        <div>
+            <strong>Anonymous response record</strong>
+            <p>
+                The analytics response does not store employee id, email, name, SSO subject, or participant id.
+            </p>
+        </div>
+    </div>
+
+    <section class="section-card submitted-state">
+        <h3>What managers can see</h3>
+        <p>
+            Managers see aggregated scores only. Team breakdowns with fewer than 4 respondents are hidden,
+            and the dashboard warns about inference risks where a small hidden team could be reconstructed.
+        </p>
+        <a class="button-link" href="/employee">Back to my surveys</a>
+        {% if current_user.is_manager %}
+            <a class="button-link secondary" href="/manager/{{ current_user.id }}">Open my manager dashboard</a>
+        {% endif %}
+    </section>
+</section>
+{% endblock %}

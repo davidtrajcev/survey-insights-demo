@@ -175,18 +175,12 @@
 
 <section class="score-grid">
     {% for score in report.overall_rollup.category_scores %}
-    {% if score.category != "eNPS" %}
     {% set cmp = company_comparison.categories.get(score.category) if company_comparison else None %}
     <div class="score-card cat-{{ score.category | lower }}">
         <span>{{ score.category }}</span>
         {% if score.visible %}
-            {% if score.category == "eNPS" %}
-                <strong>{{ score.enps_score }}</strong>
-                <small>Net score (−100 to 100) · {{ score.respondent_count }} responses</small>
-            {% else %}
-                <strong>{{ score.average_score }}</strong>
-                <small>Average score · {{ score.respondent_count }} responses</small>
-            {% endif %}
+            <strong>{{ score.average_score }}</strong>
+            <small>Average score · {{ score.respondent_count }} responses</small>
             {% if cmp %}
             <div class="benchmark {{ cmp.direction }}">
                 <span class="bm-text">vs {{ company_comparison.company_name | lower }} {{ cmp.benchmark }}</span>
@@ -212,7 +206,6 @@
             <small>{{ score.reason }}</small>
         {% endif %}
     </div>
-    {% endif %}
     {% endfor %}
 
     {# eNPS is a continuous monthly pulse — show the pulse closest to the selected cycle's date. #}
@@ -326,7 +319,6 @@
                     <th>Workload</th>
                     <th>Leadership</th>
                     <th>Collaboration</th>
-                    <th>eNPS</th>
                 </tr>
             </thead>
             <tbody>
@@ -336,22 +328,18 @@
                     <td>{{ row.root_org_unit_name }}</td>
                     {% if row.visible %}
                         <td>{{ row.respondent_count }}</td>
-                        {% for category in ["Health", "Workload", "Leadership", "Collaboration", "eNPS"] %}
+                        {% for category in ["Health", "Workload", "Leadership", "Collaboration"] %}
                             {% set score = namespace(value="—") %}
                             {% for item in row.category_scores %}
                                 {% if item.category == category and item.visible %}
-                                    {% if category == "eNPS" %}
-                                        {% set score.value = item.enps_score %}
-                                    {% else %}
-                                        {% set score.value = item.average_score %}
-                                    {% endif %}
+                                    {% set score.value = item.average_score %}
                                 {% endif %}
                             {% endfor %}
                             <td>{{ score.value }}</td>
                         {% endfor %}
                     {% else %}
                         <td>{{ row.respondent_count_label }}</td>
-                        <td colspan="5" class="muted-cell">{{ row.reason }}</td>
+                        <td colspan="4" class="muted-cell">{{ row.reason }}</td>
                     {% endif %}
                 </tr>
                 {% endfor %}
@@ -377,7 +365,6 @@
                 <th>Workload</th>
                 <th>Leadership</th>
                 <th>Collaboration</th>
-                <th>eNPS</th>
                 <th>Status</th>
             </tr>
         </thead>
@@ -395,15 +382,11 @@
 
                 {% if unit.visible %}
                     <td>{{ unit.respondent_count }}</td>
-                    {% for category in ["Health", "Workload", "Leadership", "Collaboration", "eNPS"] %}
+                    {% for category in ["Health", "Workload", "Leadership", "Collaboration"] %}
                         {% set score = namespace(value="—") %}
                         {% for item in unit.category_scores %}
                             {% if item.category == category and item.visible %}
-                                {% if category == "eNPS" %}
-                                    {% set score.value = item.enps_score %}
-                                {% else %}
-                                    {% set score.value = item.average_score %}
-                                {% endif %}
+                                {% set score.value = item.average_score %}
                             {% endif %}
                         {% endfor %}
                         <td>{{ score.value }}</td>
@@ -416,7 +399,7 @@
                     </td>
                 {% else %}
                     <td>{{ unit.respondent_count_label }}</td>
-                    <td colspan="5" class="muted-cell">
+                    <td colspan="4" class="muted-cell">
                         {{ unit.reason }}
                         {% if unit.privacy_note %}<br><small>{{ unit.privacy_note }}</small>{% endif %}
                     </td>

@@ -3,7 +3,7 @@ import uuid
 from datetime import date, datetime, timezone
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func
@@ -74,6 +74,34 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
 
 
+@app.exception_handler(HTTPException)
+async def auth_redirect_handler(request: Request, exc: HTTPException):
+    # A 401 means the visitor isn't signed in. Send them to the mock SSO login
+    # instead of dumping raw JSON (e.g. when following dashboard links logged out).
+    if exc.status_code == 401:
+        return RedirectResponse(url="/login", status_code=303)
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
+
+# Internal response-type codes drive scoring and form rendering, but should be
+# shown to admins as plain language. Keep the codes stable; only the label varies.
+RESPONSE_TYPE_LABELS = {
+    "likert_1_5": "Agreement scale (1–5)",
+    "enps_0_10": "eNPS scale (0–10)",
+    "text": "Free text",
+}
+
+
+def response_type_label(value: str) -> str:
+    return RESPONSE_TYPE_LABELS.get(value, value.replace("_", " "))
+
+
+templates.env.filters["response_type_label"] = response_type_label
+
+
+# The annual/half-year survey covers four themes with three weighted questions
+# each (the category score is a weighted mean). This mirrors the seeded surveys
+# so an admin-created cycle is structurally identical to the demo data.
 DEFAULT_QUESTIONS = [
     {
         "key": "employee_health",
@@ -81,36 +109,108 @@ DEFAULT_QUESTIONS = [
         "text": "I feel healthy and energized at work.",
         "response_type": "likert_1_5",
         "order": 1,
+        "weight": 1.0,
+    },
+    {
+        "key": "health_stress",
+        "category": "Health",
+        "text": "I can manage work-related stress.",
+        "response_type": "likert_1_5",
+        "order": 2,
+        "weight": 2.0,
+    },
+    {
+        "key": "health_balance",
+        "category": "Health",
+        "text": "I have a healthy work-life balance.",
+        "response_type": "likert_1_5",
+        "order": 3,
+        "weight": 1.0,
     },
     {
         "key": "workload_balance",
         "category": "Workload",
         "text": "My workload is manageable.",
         "response_type": "likert_1_5",
-        "order": 2,
+        "order": 4,
+        "weight": 2.0,
+    },
+    {
+        "key": "workload_expectations",
+        "category": "Workload",
+        "text": "The expectations placed on me are realistic.",
+        "response_type": "likert_1_5",
+        "order": 5,
+        "weight": 1.0,
+    },
+    {
+        "key": "workload_resources",
+        "category": "Workload",
+        "text": "I have the time and resources to do my job well.",
+        "response_type": "likert_1_5",
+        "order": 6,
+        "weight": 1.0,
     },
     {
         "key": "leadership_support",
         "category": "Leadership",
         "text": "I get the support I need from my manager.",
         "response_type": "likert_1_5",
-        "order": 3,
+        "order": 7,
+        "weight": 1.0,
+    },
+    {
+        "key": "leadership_clarity",
+        "category": "Leadership",
+        "text": "My manager sets a clear direction for the team.",
+        "response_type": "likert_1_5",
+        "order": 8,
+        "weight": 2.0,
+    },
+    {
+        "key": "leadership_recognition",
+        "category": "Leadership",
+        "text": "I receive recognition for doing good work.",
+        "response_type": "likert_1_5",
+        "order": 9,
+        "weight": 1.0,
     },
     {
         "key": "team_collaboration",
         "category": "Collaboration",
         "text": "Collaboration in my team works well.",
         "response_type": "likert_1_5",
-        "order": 4,
+        "order": 10,
+        "weight": 1.0,
     },
     {
-        "key": "enps",
-        "category": "eNPS",
-        "text": "How likely are you to recommend this company as a place to work?",
-        "response_type": "enps_0_10",
-        "order": 5,
+        "key": "collab_trust",
+        "category": "Collaboration",
+        "text": "There is trust and psychological safety in my team.",
+        "response_type": "likert_1_5",
+        "order": 11,
+        "weight": 2.0,
+    },
+    {
+        "key": "collab_crossteam",
+        "category": "Collaboration",
+        "text": "Collaboration across teams works well.",
+        "response_type": "likert_1_5",
+        "order": 12,
+        "weight": 1.0,
     },
 ]
+
+# eNPS is its own continuous pulse, not part of the annual/half-year survey — a
+# single 0-10 question used only for enps_pulse cycles.
+ENPS_PULSE_QUESTION = {
+    "key": "enps",
+    "category": "eNPS",
+    "text": "How likely are you to recommend this company as a place to work?",
+    "response_type": "enps_0_10",
+    "order": 1,
+    "weight": 1.0,
+}
 
 
 DASHBOARD_CATEGORIES = ["Health", "Workload", "Leadership", "Collaboration", "eNPS"]
@@ -256,7 +356,9 @@ def build_manager_usability_summary(
 
     movements = []
 
-    for category in DASHBOARD_CATEGORIES:
+    # eNPS is reported from its own monthly pulse, so the theme movement pills
+    # cover the four 1-5 themes only.
+    for category in LIKERT_CATEGORIES:
         current_value = None
         previous_value = None
 
@@ -453,7 +555,12 @@ def get_survey_admin_rows(db: Session) -> list[dict]:
 
 
 def create_default_questions_for_cycle(db: Session, cycle: SurveyCycle) -> None:
-    for question_def in DEFAULT_QUESTIONS:
+    # An eNPS pulse is a single 0-10 question; the annual/half-year survey is the
+    # four 1-5 themes. eNPS never appears in the regular survey.
+    question_defs = (
+        [ENPS_PULSE_QUESTION] if cycle.cycle_type == "enps_pulse" else DEFAULT_QUESTIONS
+    )
+    for question_def in question_defs:
         db.add(
             Question(
                 survey_cycle=cycle,
@@ -462,6 +569,7 @@ def create_default_questions_for_cycle(db: Session, cycle: SurveyCycle) -> None:
                 text=question_def["text"],
                 response_type=question_def["response_type"],
                 display_order=question_def["order"],
+                weight=question_def["weight"],
                 is_required=True,
             )
         )
@@ -1325,6 +1433,11 @@ def employee_home(request: Request, db: Session = Depends(get_db)):
     participant_rows = []
 
     for participant in participants:
+        # Draft cycles are not yet published, so they stay invisible to employees.
+        # An open cycle (active and within its dates) can be submitted; upcoming and
+        # closed cycles are shown as status/archive only.
+        if participant.survey_cycle.status == "draft":
+            continue
         participant_rows.append(
             {
                 "participant_id": participant.id,
@@ -1332,6 +1445,7 @@ def employee_home(request: Request, db: Session = Depends(get_db)):
                 "org_unit_path": " > ".join(get_org_unit_path(participant.org_unit_at_time)),
                 "has_submitted": participant.has_submitted,
                 "submitted_at": participant.submitted_at,
+                "availability": survey_availability(participant.survey_cycle),
             }
         )
 
@@ -1344,6 +1458,22 @@ def employee_home(request: Request, db: Session = Depends(get_db)):
             "participant_rows": participant_rows,
         },
     )
+
+
+def survey_availability(cycle: SurveyCycle, today: date | None = None) -> str:
+    """Submission window state for a cycle: 'open', 'upcoming', or 'closed'.
+
+    A survey can only be answered while it is active *and* the current date falls
+    within its [starts_on, ends_on] window. Active cycles whose window hasn't
+    started yet are 'upcoming'; everything else (drafts, closed, or active cycles
+    whose window has passed) is 'closed' for submission.
+    """
+    today = today or date.today()
+    if cycle.status == "active" and cycle.starts_on <= today <= cycle.ends_on:
+        return "open"
+    if cycle.status == "active" and today < cycle.starts_on:
+        return "upcoming"
+    return "closed"
 
 
 @app.get("/survey/{participant_id}")
@@ -1366,6 +1496,8 @@ def survey_form(
         .all()
     )
 
+    availability = survey_availability(participant.survey_cycle)
+
     return templates.TemplateResponse(
         request=request,
         name="survey_form.html",
@@ -1374,6 +1506,9 @@ def survey_form(
             "current_user": current_employee,
             "participant": participant,
             "questions": questions,
+            # A survey can only be answered while it is active and within its dates.
+            "availability": availability,
+            "can_submit": availability == "open",
             "org_unit_path": " > ".join(get_org_unit_path(participant.org_unit_at_time)),
         },
     )
@@ -1391,6 +1526,15 @@ async def submit_survey(
         participant_id=participant_id,
         current_employee=current_employee,
     )
+
+    # A submission is only accepted while the cycle is active AND today falls
+    # within its date window. This rejects closed/historical cycles and cycles
+    # whose window hasn't opened yet (or has already passed).
+    if survey_availability(participant.survey_cycle) != "open":
+        raise HTTPException(
+            status_code=409,
+            detail="This survey cycle is not open for submission.",
+        )
 
     if participant.has_submitted:
         return templates.TemplateResponse(

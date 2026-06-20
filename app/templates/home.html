@@ -46,7 +46,7 @@
             <li>Responses are stored separately from employee identity and are only linked to the survey cycle and org snapshot unit.</li>
             <li>Every survey cycle uses a frozen org snapshot so org changes do not rewrite historical results.</li>
             <li>Manager dashboards consume privacy-safe aggregates, not raw responses.</li>
-            <li>Teams with fewer than 4 respondents are hidden; production would add stronger secondary suppression for inference risks.</li>
+            <li>Teams with fewer than 4 respondents are hidden, and secondary suppression hides a lone sibling so a hidden team can't be recovered by subtraction across the dashboard.</li>
         </ul>
     </div>
 
@@ -57,8 +57,6 @@
             in the demo you choose a seeded employee or manager.
         </p>
         <a class="button-link" href="/login">Open mock SSO login</a>
-        <a class="button-link secondary" href="/managers">Open manager dashboards directly</a>
-        <a class="button-link secondary" href="/admin">Open P&amp;C admin</a>
     </div>
 </section>
 {% endblock %}

@@ -81,7 +81,7 @@ admins can open every manager dashboard, but anonymity suppression still applies
   **weighted question breakdown**; plus an eNPS card from the closest pulse.
 - **Visual overview** — current 1–5 scores; **team comparison** (child teams,
   sorted) for departments, or **lowest-scoring questions across all themes** for a
-  leaf team; and a visibility doughnut.
+  leaf team; and a response-rate doughnut (responded vs eligible).
 - **Trends** — theme scores across survey cycles and a separate monthly eNPS pulse.
 - **Org tree** — the manager's unit and all child units after suppression; team
   rows link through to that team's dashboard.
@@ -120,10 +120,13 @@ Open `http://127.0.0.1:8000` (health check at `/health`).
 - **AI Lab** and **SMB Sales** have fewer than 4 respondents → hidden.
 - **Secondary suppression** fires where a lone hidden child would otherwise be
   recoverable (e.g. in the Sales/Revenue and Customer Operations branches).
-- **CX Research Pod** is a new 3-person team that appears only in the latest
-  snapshot, inside a ~40-response department.
+- **Customer Operations** has roughly 40 eligible employees; in the latest cycle
+  28 responded, including two from the new three-person **CX Research Pod** that
+  appears only in the latest snapshot. The department rollup stays visible while
+  the pod and one sibling breakdown are suppressed.
 - The **eNPS monthly pulse** runs Jul 2025 → Jun 2026 and climbs from
   net-negative to net-positive.
 
-See `NOTES.md` and `CLAUDE.md` for remaining work and the production direction
-(materialising suppression at cycle close, effective-dated org from HRIS, etc.).
+In production the natural next steps are materialising suppression at cycle
+close, effective-dated org data sourced from an HRIS, and moving authentication
+to a real OIDC provider (Entra ID).

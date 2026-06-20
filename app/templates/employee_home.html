@@ -49,6 +49,12 @@
                     {% if row.has_submitted %}
                         <td><span class="status-pill visible">Submitted</span></td>
                         <td class="muted-cell">Already submitted</td>
+                    {% elif row.availability == "upcoming" %}
+                        <td><span class="status-pill draft">Opens {{ row.survey_cycle.starts_on }}</span></td>
+                        <td><a class="button-link table-action secondary" href="/survey/{{ row.participant_id }}">View details</a></td>
+                    {% elif row.availability == "closed" %}
+                        <td><span class="status-pill closed">Closed</span></td>
+                        <td><a class="button-link table-action secondary" href="/survey/{{ row.participant_id }}">View (archived)</a></td>
                     {% else %}
                         <td><span class="status-pill hidden">Not submitted</span></td>
                         <td><a class="button-link table-action" href="/survey/{{ row.participant_id }}">Open survey</a></td>

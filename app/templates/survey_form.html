@@ -59,6 +59,24 @@
             </p>
             <a class="button-link" href="/employee">Return to my surveys</a>
         </section>
+    {% elif availability == "upcoming" %}
+        <section class="section-card submitted-state">
+            <h3>This survey isn't open yet</h3>
+            <p>
+                This survey cycle opens on {{ participant.survey_cycle.starts_on }}.
+                You'll be able to submit a response once the survey period begins.
+            </p>
+            <a class="button-link" href="/employee">Return to my surveys</a>
+        </section>
+    {% elif not can_submit %}
+        <section class="section-card submitted-state">
+            <h3>This survey is closed</h3>
+            <p>
+                This survey cycle is closed and is shown here for reference only.
+                Closed cycles can no longer accept submissions.
+            </p>
+            <a class="button-link" href="/employee">Return to my surveys</a>
+        </section>
     {% else %}
         <form method="post" class="survey-form">
             {% for question in questions %}

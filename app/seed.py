@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 import random
 import uuid
 
@@ -120,14 +120,6 @@ QUESTIONS = [
         "order": 12,
         "weight": 1.0,
     },
-    {
-        "key": "enps",
-        "category": "eNPS",
-        "text": "How likely are you to recommend this company as a place to work?",
-        "response_type": "enps_0_10",
-        "order": 13,
-        "weight": 1.0,
-    },
 ]
 
 # question_key -> category, used by the deterministic scorer so org-level
@@ -135,9 +127,8 @@ QUESTIONS = [
 QUESTION_CATEGORY = {question["key"]: question["category"] for question in QUESTIONS}
 
 
-# eNPS is also run as a continuous monthly pulse (separate cadence from the
-# annual/half-year survey). Step 1 adds the pulse data; the main-page eNPS card
-# reads the pulse closest to the selected survey cycle's date.
+# eNPS is NOT part of the annual/half-year survey — it runs only as a separate
+# continuous monthly pulse, a single 0-10 question on its own cadence.
 ENPS_PULSE_QUESTION = {
     "key": "enps",
     "category": "eNPS",
@@ -469,7 +460,6 @@ def score_for_answer(
             "team_collaboration": 3.5,
             "collab_trust": 3.3,
             "collab_crossteam": 3.6,
-            "enps": 6.4,
         },
         "Annual 2025": {
             "employee_health": 3.8,
@@ -484,7 +474,6 @@ def score_for_answer(
             "team_collaboration": 3.8,
             "collab_trust": 3.6,
             "collab_crossteam": 3.9,
-            "enps": 7.5,
         },
         "Half-year 2026": {
             "employee_health": 4.1,
@@ -499,7 +488,6 @@ def score_for_answer(
             "team_collaboration": 4.1,
             "collab_trust": 3.9,
             "collab_crossteam": 4.2,
-            "enps": 8.6,
         },
     }
 
@@ -525,12 +513,6 @@ def score_for_answer(
     category = QUESTION_CATEGORY[question_key]
     baseline = cycle_baseline[cycle_name][question_key]
     adjustment = org_adjustment.get(org_key, {}).get(category, 0.0)
-
-    if question_key == "enps":
-        # Wider deterministic variation gives a healthier promoter/passive/detractor mix.
-        variation = ((respondent_index % 5) - 2) * 0.5
-        value = baseline + adjustment + variation
-        return round(clamp(value, 0, 10), 0)
 
     # Small deterministic variation between respondents.
     variation = ((respondent_index % 3) - 1) * 0.2
@@ -567,11 +549,12 @@ def create_enps_pulse_cycle(
     starts_on: date,
     ends_on: date,
     snapshot: OrgSnapshot,
+    status: str = "closed",
 ):
     cycle = SurveyCycle(
         name=name,
         cycle_type="enps_pulse",
-        status="closed",
+        status=status,
         starts_on=starts_on,
         ends_on=ends_on,
         org_snapshot=snapshot,
@@ -799,12 +782,26 @@ def seed():
             pulse_end = date(pulse_year, pulse_month, 7)
             pulse_snapshot = effective_snapshot(pulse_start)
 
+            # The most recent pulse is left open so the survey-taking flow can be
+            # demonstrated live; all earlier pulses are closed archives.
+            is_latest_pulse = month_index == ENPS_PULSE_COUNT - 1
+
+            # Submission is date-gated, so the active pulse's window must include
+            # "today" no matter when the demo is seeded. Keep its start at the month
+            # boundary (so the monthly trend position is unchanged) and extend the
+            # end past today.
+            if is_latest_pulse:
+                today = date.today()
+                pulse_start = min(pulse_start, today)
+                pulse_end = today + timedelta(days=7)
+
             pulse_cycle, pulse_questions = create_enps_pulse_cycle(
                 db=db,
                 name=f"eNPS Pulse {pulse_year}-{pulse_month:02d}",
                 starts_on=pulse_start,
                 ends_on=pulse_end,
                 snapshot=pulse_snapshot,
+                status="active" if is_latest_pulse else "closed",
             )
 
             create_participants_and_responses(
@@ -839,11 +836,11 @@ def seed():
         print("- Marcus Eriksson manages Customer Operations")
         print()
         print("Important seeded edge cases:")
-        print("- AI Lab has fewer than 4 respondents and should be hidden")
-        print("- SMB Sales has fewer than 4 respondents and should be hidden")
-        print("- AI Lab moved from under Data Team to directly under Engineering")
-        print("- CX Research Pod appears only in Annual 2026 as a new 3-person team inside Customer Operations")
-        print("- Customer Operations demonstrates a 3-person team rolling up into a 40-response department")
+        print("- AI Lab (under Data Team) and SMB Sales fall below 4 respondents and are hidden")
+        print("- CX Research Pod is a new 3-person team that appears only in the latest snapshot (Half-year 2026)")
+        print("- Customer Operations has ~40 eligible employees; at ~70% response its 3-person CX Research Pod is")
+        print("  hidden and one sibling is secondarily suppressed, while the department rollup stays visible")
+        print("- eNPS is a separate monthly pulse (the latest month is left active for live submission)")
         print("- Category scores vary by function so dashboards show clearer trends")
 
     finally:

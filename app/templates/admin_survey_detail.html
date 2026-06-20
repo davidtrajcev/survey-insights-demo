@@ -59,7 +59,7 @@
     <div class="admin-actions">
         {% if cycle.status == "draft" %}
             <form method="post" action="/admin/surveys/{{ cycle.id }}/publish">
-                <button type="submit">Publish survey</button>
+                <button class="button-link" type="submit">Publish survey</button>
             </form>
         {% endif %}
 
@@ -90,7 +90,7 @@
                     <td>{{ question.display_order }}</td>
                     <td>{{ question.category }}</td>
                     <td>{{ question.text }}</td>
-                    <td>{{ question.response_type }}</td>
+                    <td>{{ question.response_type | response_type_label }}</td>
                 </tr>
             {% endfor %}
         </tbody>

@@ -10,6 +10,16 @@
             Survey: {{ selected_cycle.name }} ·
             Historical snapshot: {{ report.survey_cycle.org_snapshot }}
         </p>
+        {% if response_rate %}
+        <p class="response-rate">
+            {% if response_rate.visible %}
+                <span class="rr-pill">{{ response_rate.responded }} of {{ response_rate.eligible }} responded</span>
+                <span class="rr-rate">{{ response_rate.rate }}% response rate</span>
+            {% else %}
+                <span class="rr-pill">Fewer than 4 of {{ response_rate.eligible }} responded</span>
+            {% endif %}
+        </p>
+        {% endif %}
         <p class="muted-text">
             Current access scope: {{ viewer_org_unit_path }} ·
             Target manager's current scope: {{ current_target_org_unit_path }}
@@ -259,9 +269,14 @@
         </div>
 
         <div class="mini-chart-card">
-            <h4>Visibility status</h4>
-            <p>How much of the org tree can be safely shown.</p>
-            <div class="mini-chart-wrapper"><canvas id="visibilityChart"></canvas></div>
+            <h4>Response rate</h4>
+            {% if response_rate and response_rate.visible %}
+                <p>{{ response_rate.responded }} of {{ response_rate.eligible }} responded · {{ response_rate.rate }}%</p>
+                <div class="mini-chart-wrapper"><canvas id="responseRateChart"></canvas></div>
+            {% else %}
+                <p>Response rate for this scope.</p>
+                <p class="muted-text">Fewer than 4 responses — withheld.</p>
+            {% endif %}
         </div>
     </div>
 </section>
@@ -452,7 +467,7 @@
     const currentScoreChartData = {{ current_score_chart_data_json | safe }};
     const teamComparisonChartData = {{ team_comparison_chart_data_json | safe }};
     const lowestQuestionsChartData = {{ lowest_questions_chart_data_json | safe }};
-    const visibilityChartData = {{ visibility_chart_data_json | safe }};
+    const responseRateChartData = {{ response_rate_chart_data_json | safe }};
 
     // Shared category palette — keeps charts in sync with the KPI cards / pills.
     const CATEGORY_COLORS = {
@@ -493,10 +508,9 @@
         ds.maxBarThickness = 30;
     });
 
-    // Visibility doughnut: visible / hidden / secondary. No segment border, so a
-    // single 100% slice renders as a solid ring with no seam.
-    visibilityChartData.datasets.forEach((ds) => {
-        ds.backgroundColor = [STATUS_COLORS.visible, STATUS_COLORS.hidden, STATUS_COLORS.secondary];
+    // Response-rate doughnut: responded vs no response.
+    responseRateChartData.datasets.forEach((ds) => {
+        ds.backgroundColor = [STATUS_COLORS.visible, "#e6eaf1"];
         ds.borderWidth = 0;
         ds.hoverOffset = 6;
     });
@@ -601,20 +615,24 @@
         });
     }
 
-    const visibilityCtx = document.getElementById("visibilityChart");
-    if (visibilityCtx && window.Chart) {
-        new Chart(visibilityCtx, {
+    const responseRateCtx = document.getElementById("responseRateChart");
+    if (responseRateCtx && window.Chart) {
+        new Chart(responseRateCtx, {
             type: "doughnut",
-            data: visibilityChartData,
+            data: responseRateChartData,
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                cutout: "62%",
                 plugins: {
-                    legend: {
-                        position: "bottom"
-                    }
-                }
-            }
+                    legend: { position: "bottom" },
+                    tooltip: {
+                        callbacks: {
+                            label: (item) => item.label + ": " + item.formattedValue,
+                        },
+                    },
+                },
+            },
         });
     }
 

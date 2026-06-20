@@ -16,11 +16,26 @@ def is_visible_count(respondent_count: int | None) -> bool:
     return respondent_count is not None and respondent_count >= MIN_RESPONDENTS
 
 
-def hidden_result(reason: str = "Hidden due to anonymity threshold") -> dict[str, Any]:
-    return {
-        "visible": False,
-        "reason": reason,
-    }
+def _strip_internal_fields(value: Any) -> Any:
+    """
+    Recursively remove internal-only keys (those starting with "_") from a
+    privacy-safe structure before it leaves this module.
+
+    Suppression keeps fields like `_raw_respondent_count` on the unit dicts so the
+    secondary-suppression pass can pick the smallest visible sibling. This final
+    scrub guarantees those never reach a template or a JSON response, where they
+    would expose the exact count of a suppressed team.
+    """
+
+    if isinstance(value, dict):
+        return {
+            key: _strip_internal_fields(item)
+            for key, item in value.items()
+            if not key.startswith("_")
+        }
+    if isinstance(value, list):
+        return [_strip_internal_fields(item) for item in value]
+    return value
 
 
 def apply_threshold_to_category_scores(
@@ -321,7 +336,9 @@ def apply_privacy_to_manager_report(
         "inference_risks": inference_risks,
     }
 
-    return safe_report
+    # Final scrub: internal-only fields (e.g. _raw_respondent_count, used by the
+    # secondary-suppression pass above) must never reach a template or JSON.
+    return _strip_internal_fields(safe_report)
 
 
 def apply_privacy_to_trends(

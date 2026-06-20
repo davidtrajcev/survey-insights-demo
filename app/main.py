@@ -6,7 +6,7 @@ from fastapi import Depends, FastAPI, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import func, inspect
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -29,9 +29,8 @@ from app.models import (
 
 from app.services.analytics_service import (
     get_company_benchmark,
+    get_eligible_count,
     get_enps_pulse_trend,
-    get_manager_cycle_report,
-    get_manager_trends,
     get_org_unit_cycle_report,
     get_org_unit_trends,
     get_question_breakdown,
@@ -47,7 +46,6 @@ from app.services.org_service import (
     get_current_managed_org_unit,
     get_current_org_root_unit,
     get_descendant_org_units,
-    get_managed_org_unit_for_cycle,
     get_latest_survey_cycle,
     get_org_unit_by_external_key_for_cycle,
     get_org_unit_path,
@@ -365,28 +363,6 @@ def build_team_comparison_chart_data(safe_report: dict, focus_category: str) -> 
             {
                 "label": focus_category,
                 "data": values,
-            }
-        ],
-    }
-
-
-def build_visibility_chart_data(safe_report: dict) -> dict:
-    org_units = safe_report.get("org_units", [])
-
-    visible_count = len([unit for unit in org_units if unit.get("visible")])
-    secondary_count = len(
-        [unit for unit in org_units if not unit.get("visible") and unit.get("secondary_suppression")]
-    )
-    threshold_count = len(
-        [unit for unit in org_units if not unit.get("visible") and not unit.get("secondary_suppression")]
-    )
-
-    return {
-        "labels": ["Visible", "Hidden <4", "Secondary suppression"],
-        "datasets": [
-            {
-                "label": "Org units",
-                "data": [visible_count, threshold_count, secondary_count],
             }
         ],
     }
@@ -908,6 +884,24 @@ def build_manager_dashboard_context(
         )
     )
 
+    # Response rate for the manager's scope. The exact responded count is only
+    # shown when the scope itself clears the threshold (otherwise it would leak a
+    # sub-4 count).
+    scope_eligible = get_eligible_count(
+        db=db, survey_cycle_id=selected_cycle.id, org_unit_ids=scope_org_unit_ids
+    )
+    scope_rollup = safe_report.get("overall_rollup", {})
+    if scope_rollup.get("visible") and scope_eligible:
+        responded = scope_rollup.get("respondent_count", 0)
+        response_rate = {
+            "visible": True,
+            "responded": responded,
+            "eligible": scope_eligible,
+            "rate": round(responded / scope_eligible * 100),
+        }
+    else:
+        response_rate = {"visible": False, "eligible": scope_eligible}
+
     # Company-wide comparison baseline. Skipped when the manager's scope is the
     # company root itself (comparing to yourself is meaningless).
     company_comparison = None
@@ -929,7 +923,18 @@ def build_manager_dashboard_context(
         safe_report=safe_report,
         focus_category=focus_category,
     )
-    visibility_chart_data = build_visibility_chart_data(safe_report)
+
+    if response_rate.get("visible"):
+        not_responded = max(response_rate["eligible"] - response_rate["responded"], 0)
+        response_rate_chart_data = {
+            "labels": ["Responded", "No response"],
+            "datasets": [{"label": "Responses", "data": [response_rate["responded"], not_responded]}],
+            "rate": response_rate["rate"],
+            "responded": response_rate["responded"],
+            "eligible": response_rate["eligible"],
+        }
+    else:
+        response_rate_chart_data = {"labels": [], "datasets": [{"data": []}], "rate": None}
 
     # Sibling comparison only makes sense with 2+ comparable child teams. For a
     # leaf team, swap that panel for the lowest-scoring questions to act on.
@@ -952,12 +957,7 @@ def build_manager_dashboard_context(
                 None,
             )
 
-            if not score:
-                values.append(None)
-            elif category == "eNPS":
-                values.append(score.get("enps_score"))
-            else:
-                values.append(score.get("average_score"))
+            values.append(score.get("average_score") if score else None)
 
         return values
 
@@ -1046,13 +1046,14 @@ def build_manager_dashboard_context(
         "manager_summary": manager_summary,
         "company_comparison": company_comparison,
         "question_breakdown": question_breakdown,
+        "response_rate": response_rate,
         "enps_pulse_card": enps_pulse_card,
         "enps_pulse_comparison": enps_pulse_comparison,
         "chart_data_json": json.dumps(chart_data, default=str),
         "enps_chart_data_json": json.dumps(enps_chart_data, default=str),
         "current_score_chart_data_json": json.dumps(current_score_chart_data, default=str),
         "team_comparison_chart_data_json": json.dumps(team_comparison_chart_data, default=str),
-        "visibility_chart_data_json": json.dumps(visibility_chart_data, default=str),
+        "response_rate_chart_data_json": json.dumps(response_rate_chart_data, default=str),
         "has_comparable_children": has_comparable_children,
         "lowest_questions_chart_data": lowest_questions_chart_data,
         "lowest_questions_chart_data_json": json.dumps(lowest_questions_chart_data, default=str),
@@ -1536,190 +1537,3 @@ def health():
         "app": "survey-insights-demo",
     }
 
-
-@app.get("/debug/tables")
-def debug_tables():
-    inspector = inspect(engine)
-    return {
-        "tables": inspector.get_table_names()
-    }
-
-
-@app.get("/debug/summary")
-def debug_summary(db: Session = Depends(get_db)):
-    return {
-        "employees": db.query(func.count(Employee.id)).scalar(),
-        "org_snapshots": db.query(func.count(OrgSnapshot.id)).scalar(),
-        "org_units": db.query(func.count(OrgUnitSnapshot.id)).scalar(),
-        "org_memberships": db.query(func.count(OrgMembershipSnapshot.id)).scalar(),
-        "survey_cycles": db.query(func.count(SurveyCycle.id)).scalar(),
-        "questions": db.query(func.count(Question.id)).scalar(),
-        "survey_participants": db.query(func.count(SurveyParticipant.id)).scalar(),
-        "response_submissions": db.query(func.count(ResponseSubmission.id)).scalar(),
-        "response_answers": db.query(func.count(ResponseAnswer.id)).scalar(),
-    }
-
-
-@app.get("/debug/cycles")
-def debug_cycles(db: Session = Depends(get_db)):
-    cycles = db.query(SurveyCycle).order_by(SurveyCycle.starts_on).all()
-
-    return [
-        {
-            "id": cycle.id,
-            "name": cycle.name,
-            "type": cycle.cycle_type,
-            "status": cycle.status,
-            "starts_on": cycle.starts_on,
-            "ends_on": cycle.ends_on,
-            "org_snapshot": cycle.org_snapshot.name,
-        }
-        for cycle in cycles
-    ]
-
-
-@app.get("/debug/managers")
-def debug_managers(db: Session = Depends(get_db)):
-    managers = (
-        db.query(Employee)
-        .filter(Employee.is_manager.is_(True))
-        .order_by(Employee.full_name)
-        .all()
-    )
-
-    return [
-        {
-            "id": manager.id,
-            "name": manager.full_name,
-            "email": manager.email,
-        }
-        for manager in managers
-    ]
-
-@app.get("/debug/manager/{manager_id}/cycle/{survey_cycle_id}/scope")
-def debug_manager_scope(
-    manager_id: int,
-    survey_cycle_id: int,
-    db: Session = Depends(get_db),
-):
-    cycle = get_survey_cycle(db, survey_cycle_id)
-
-    if not cycle:
-        raise HTTPException(status_code=404, detail="Survey cycle not found")
-
-    root_org_unit = get_managed_org_unit_for_cycle(
-        db=db,
-        manager_id=manager_id,
-        survey_cycle_id=survey_cycle_id,
-    )
-
-    if not root_org_unit:
-        raise HTTPException(
-            status_code=404,
-            detail="Manager does not manage an org unit in this survey cycle",
-        )
-
-    scoped_units = get_descendant_org_units(db, root_org_unit)
-
-    return {
-        "survey_cycle": {
-            "id": cycle.id,
-            "name": cycle.name,
-            "org_snapshot": cycle.org_snapshot.name,
-        },
-        "manager_id": manager_id,
-        "root_org_unit": {
-            "id": root_org_unit.id,
-            "name": root_org_unit.name,
-            "path": " > ".join(get_org_unit_path(root_org_unit)),
-        },
-        "scoped_org_units": [
-            {
-                "id": unit.id,
-                "name": unit.name,
-                "path": " > ".join(get_org_unit_path(unit)),
-                "parent_id": unit.parent_id,
-                "manager_id": unit.manager_employee_id,
-            }
-            for unit in scoped_units
-        ],
-    }
-
-
-@app.get("/debug/manager/{manager_id}/cycle/{survey_cycle_id}/raw-report")
-def debug_manager_raw_report(
-    manager_id: int,
-    survey_cycle_id: int,
-    db: Session = Depends(get_db),
-):
-    report = get_manager_cycle_report(
-        db=db,
-        manager_id=manager_id,
-        survey_cycle_id=survey_cycle_id,
-    )
-
-    if not report:
-        raise HTTPException(
-            status_code=404,
-            detail="No report found for this manager and survey cycle",
-        )
-
-    return report
-
-
-@app.get("/debug/manager/{manager_id}/trends")
-def debug_manager_trends(
-    manager_id: int,
-    db: Session = Depends(get_db),
-):
-    trends = get_manager_trends(
-        db=db,
-        manager_id=manager_id,
-    )
-
-    if not trends:
-        raise HTTPException(
-            status_code=404,
-            detail="No trends found for this manager",
-        )
-
-    return trends
-
-@app.get("/debug/manager/{manager_id}/cycle/{survey_cycle_id}/safe-report")
-def debug_manager_safe_report(
-    manager_id: int,
-    survey_cycle_id: int,
-    db: Session = Depends(get_db),
-):
-    raw_report = get_manager_cycle_report(
-        db=db,
-        manager_id=manager_id,
-        survey_cycle_id=survey_cycle_id,
-    )
-
-    if not raw_report:
-        raise HTTPException(
-            status_code=404,
-            detail="No report found for this manager and survey cycle",
-        )
-
-    return apply_privacy_to_manager_report(raw_report)
-
-
-@app.get("/debug/manager/{manager_id}/safe-trends")
-def debug_manager_safe_trends(
-    manager_id: int,
-    db: Session = Depends(get_db),
-):
-    raw_trends = get_manager_trends(
-        db=db,
-        manager_id=manager_id,
-    )
-
-    if not raw_trends:
-        raise HTTPException(
-            status_code=404,
-            detail="No trends found for this manager",
-        )
-
-    return apply_privacy_to_trends(raw_trends)

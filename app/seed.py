@@ -167,6 +167,26 @@ ENPS_ORG_ADJUSTMENT = {
     "cx_research_pod": -0.9,
 }
 
+# Submitted responses per team — tuned to ~70% of each team's size (the case's
+# stated response rate), while preserving the suppression narrative: AI Lab, SMB
+# Sales and the CX Research Pod stay below 4 (hidden); Product Engineering stays
+# visible so Engineering keeps a clean team comparison. Shared across all cycles
+# (the cx_research_pod entry is only used in snapshots that include that team).
+RESPONSE_TARGETS = {
+    "engineering": 1,          # 1 of 1   (manager)
+    "platform": 4,             # 4 of 6   67%
+    "data": 4,                 # 4 of 5   80%
+    "ai_lab": 2,               # 2 of 3   hidden (<4)
+    "product_engineering": 4,  # 4 of 4   kept visible
+    "sales": 1,                # 1 of 1   (manager)
+    "enterprise_sales": 4,     # 4 of 5   80%
+    "smb_sales": 2,            # 2 of 3   hidden (<4)
+    "customer_operations": 0,  # 0 of 1
+    "core_support": 14,        # 14 of 20 70%
+    "customer_success": 12,    # 12 of 17 71%
+    "cx_research_pod": 2,      # 2 of 3   hidden (<4)
+}
+
 
 # Employee codes that are People & Culture admins (pure admin identities — not
 # part of any org unit, no surveys of their own).
@@ -212,6 +232,8 @@ EMPLOYEES = [
     ("E020", "Jonas Meyer", "jonas@example.com", False),
     ("E021", "Maya Chen", "maya@example.com", False),
     ("E022", "Peter Novak", "peter@example.com", False),
+    ("E070", "Tara Holm", "tara@example.com", False),
+    ("E071", "Felix Bauer", "felix@example.com", False),
 
     # Enterprise Sales
     ("E023", "Clara Stone", "clara@example.com", False),
@@ -348,7 +370,7 @@ def create_org_snapshot(
         "platform": ["E003", "E009", "E010", "E011", "E012", "E013"],
         "data": ["E004", "E014", "E015", "E016", "E017"],
         "ai_lab": ["E005", "E018", "E019"],
-        "product_engineering": ["E006", "E020", "E021", "E022"],
+        "product_engineering": ["E006", "E020", "E021", "E022", "E070", "E071"],
 
         "enterprise_sales": ["E007", "E023", "E024", "E025", "E026"],
         "smb_sales": ["E008", "E027", "E028"],
@@ -735,19 +757,7 @@ def seed():
             cycle=h1_2025,
             questions_by_key=h1_2025_questions,
             snapshot=snapshot_h1_2025,
-            response_targets_by_org={
-                "engineering": 1,
-                "platform": 5,
-                "data": 4,
-                "ai_lab": 3,
-                "product_engineering": 3,
-                "sales": 1,
-                "enterprise_sales": 4,
-                "smb_sales": 2,
-                "customer_operations": 0,
-                "core_support": 18,
-                "customer_success": 17,
-            },
+            response_targets_by_org=RESPONSE_TARGETS,
         )
 
         create_participants_and_responses(
@@ -755,19 +765,7 @@ def seed():
             cycle=annual_2025,
             questions_by_key=annual_2025_questions,
             snapshot=snapshot_annual_2025,
-            response_targets_by_org={
-                "engineering": 1,
-                "platform": 5,
-                "data": 4,
-                "ai_lab": 3,
-                "product_engineering": 4,
-                "sales": 1,
-                "enterprise_sales": 4,
-                "smb_sales": 2,
-                "customer_operations": 0,
-                "core_support": 20,
-                "customer_success": 16,
-            },
+            response_targets_by_org=RESPONSE_TARGETS,
         )
 
         create_participants_and_responses(
@@ -775,20 +773,7 @@ def seed():
             cycle=h1_2026,
             questions_by_key=h1_2026_questions,
             snapshot=snapshot_h1_2026,
-            response_targets_by_org={
-                "engineering": 1,
-                "platform": 5,
-                "data": 4,
-                "ai_lab": 3,
-                "product_engineering": 4,
-                "sales": 1,
-                "enterprise_sales": 5,
-                "smb_sales": 3,
-                "customer_operations": 0,
-                "core_support": 20,
-                "customer_success": 17,
-                "cx_research_pod": 3,
-            },
+            response_targets_by_org=RESPONSE_TARGETS,
         )
 
         print("Creating monthly eNPS pulses...")
@@ -806,21 +791,6 @@ def seed():
                 if snap_date <= on_date:
                     chosen = snap
             return chosen
-
-        pulse_targets = {
-            "engineering": 1,
-            "platform": 5,
-            "data": 4,
-            "ai_lab": 3,
-            "product_engineering": 4,
-            "sales": 1,
-            "enterprise_sales": 4,
-            "smb_sales": 2,
-            "customer_operations": 0,
-            "core_support": 18,
-            "customer_success": 16,
-            "cx_research_pod": 3,
-        }
 
         pulse_year, pulse_month = 2025, 7
 
@@ -842,7 +812,7 @@ def seed():
                 cycle=pulse_cycle,
                 questions_by_key=pulse_questions,
                 snapshot=pulse_snapshot,
-                response_targets_by_org=pulse_targets,
+                response_targets_by_org=RESPONSE_TARGETS,
                 score_fn=lambda org, qk, idx, mi=month_index: enps_pulse_value(
                     month_index=mi,
                     total_months=ENPS_PULSE_COUNT,

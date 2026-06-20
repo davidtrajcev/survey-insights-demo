@@ -4,10 +4,9 @@ from typing import Any
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.models import Question, ResponseAnswer, ResponseSubmission, OrgUnitSnapshot
+from app.models import Question, ResponseAnswer, ResponseSubmission, OrgUnitSnapshot, SurveyParticipant
 from app.services.org_service import (
     get_descendant_org_units,
-    get_managed_org_unit_for_cycle,
     get_org_unit_by_external_key_for_cycle,
     get_org_unit_path,
     get_relative_depth,
@@ -44,6 +43,27 @@ def get_submission_count(
         .filter(
             ResponseSubmission.survey_cycle_id == survey_cycle_id,
             ResponseSubmission.org_unit_id_at_time.in_(org_unit_ids),
+        )
+        .scalar()
+        or 0
+    )
+
+
+def get_eligible_count(
+    db: Session,
+    survey_cycle_id: int,
+    org_unit_ids: list[int],
+) -> int:
+    """Number of eligible participants in a scope — the denominator for response rate."""
+
+    if not org_unit_ids:
+        return 0
+
+    return (
+        db.query(func.count(SurveyParticipant.id))
+        .filter(
+            SurveyParticipant.survey_cycle_id == survey_cycle_id,
+            SurveyParticipant.org_unit_id_at_time.in_(org_unit_ids),
         )
         .scalar()
         or 0
@@ -488,95 +508,3 @@ def get_org_unit_trends(
 
     return trend_rows
 
-
-def get_manager_cycle_report(
-    db: Session,
-    manager_id: int,
-    survey_cycle_id: int,
-) -> dict[str, Any] | None:
-    """
-    Historical/debug wrapper that resolves manager ownership inside the selected
-    survey snapshot.
-
-    The raw analytics layer does not apply suppression. The dashboard should
-    use privacy_service before rendering results, and production access should
-    be resolved from the current org rather than this historical manager field.
-    """
-
-    root_org_unit = get_managed_org_unit_for_cycle(
-        db=db,
-        manager_id=manager_id,
-        survey_cycle_id=survey_cycle_id,
-    )
-
-    if not root_org_unit:
-        return None
-
-    return get_org_unit_cycle_report(
-        db=db,
-        root_org_unit=root_org_unit,
-        survey_cycle_id=survey_cycle_id,
-        manager_id=manager_id,
-    )
-
-
-def get_manager_trends(
-    db: Session,
-    manager_id: int,
-) -> list[dict[str, Any]]:
-    """
-    Calculates manager-level trend data across all survey cycles.
-
-    Important:
-    The manager's scope is resolved separately for each survey cycle.
-    That means each result uses that cycle's org snapshot.
-
-    This is what allows org changes over time without breaking historical reporting.
-    """
-
-    from app.models import SurveyCycle
-
-    cycles = (
-        db.query(SurveyCycle)
-        .filter(SurveyCycle.cycle_type.in_(["annual", "half_year"]))
-        .order_by(SurveyCycle.starts_on)
-        .all()
-    )
-
-    trend_rows = []
-
-    for cycle in cycles:
-        root_org_unit = get_managed_org_unit_for_cycle(
-            db=db,
-            manager_id=manager_id,
-            survey_cycle_id=cycle.id,
-        )
-
-        if not root_org_unit:
-            continue
-
-        descendant_units = get_descendant_org_units(db, root_org_unit)
-        descendant_unit_ids = [unit.id for unit in descendant_units]
-
-        category_scores = get_category_scores(
-            db=db,
-            survey_cycle_id=cycle.id,
-            org_unit_ids=descendant_unit_ids,
-        )
-
-        trend_rows.append(
-            {
-                "survey_cycle_id": cycle.id,
-                "survey_cycle_name": cycle.name,
-                "starts_on": cycle.starts_on,
-                "root_org_unit_name": root_org_unit.name,
-                "respondent_count": get_submission_count(
-                    db=db,
-                    survey_cycle_id=cycle.id,
-                    org_unit_ids=descendant_unit_ids,
-                ),
-                "category_scores": category_scores,
-            }
-        )
-
-    return trend_rows

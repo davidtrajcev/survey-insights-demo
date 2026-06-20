@@ -424,6 +424,30 @@ table {
     font-size: 14px;
 }
 
+.response-rate {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.response-rate .rr-pill {
+    display: inline-flex;
+    align-items: center;
+    background: var(--accent-soft);
+    color: var(--accent-700);
+    border-radius: var(--pill);
+    padding: 4px 12px;
+    font-size: 13px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.response-rate .rr-rate {
+    color: var(--ink-3);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+}
+
 .selector-form {
     background: var(--surface);
     border: 1px solid var(--line);

@@ -138,34 +138,6 @@ def is_org_unit_descendant_or_self(
     return candidate.id in descendant_ids
 
 
-def get_managed_org_unit_for_cycle(
-    db: Session,
-    manager_id: int,
-    survey_cycle_id: int,
-) -> Optional[OrgUnitSnapshot]:
-    """
-    Finds the org unit managed by this manager in this specific survey cycle.
-
-    This is useful for historical/debug views. For real dashboard access, use
-    the current org to decide who may see the dashboard, then map that current
-    org unit into the selected survey cycle for historical attribution.
-    """
-
-    cycle = get_survey_cycle(db, survey_cycle_id)
-
-    if not cycle:
-        return None
-
-    return (
-        db.query(OrgUnitSnapshot)
-        .filter(
-            OrgUnitSnapshot.snapshot_id == cycle.org_snapshot_id,
-            OrgUnitSnapshot.manager_employee_id == manager_id,
-        )
-        .first()
-    )
-
-
 def get_all_org_units_for_snapshot(
     db: Session,
     snapshot_id: int,

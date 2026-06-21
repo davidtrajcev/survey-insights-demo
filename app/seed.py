@@ -156,26 +156,34 @@ ENPS_ORG_ADJUSTMENT = {
     "core_support": -0.1,
     "customer_success": 0.6,
     "cx_research_pod": -0.9,
+    "engineering_leadership": 0.4,
+    "revenue_leadership": 0.2,
+    "customer_operations_leadership": 0.3,
 }
 
-# Submitted responses per team — tuned to ~70% of each team's size (the case's
+# Submitted responses per team — tuned to ~70-80% of each team's size (the case's
 # stated response rate), while preserving the suppression narrative: AI Lab, SMB
-# Sales and the CX Research Pod stay below 4 (hidden); Product Engineering stays
-# visible so Engineering keeps a clean team comparison. Shared across all cycles
-# (the cx_research_pod entry is only used in snapshots that include that team).
+# Sales and the CX Research Pod stay below 4 (hidden). Managers report in their
+# department's Leadership cohort, so every team here counts ICs only. Shared
+# across all cycles (cx_research_pod only applies in snapshots that include it).
 RESPONSE_TARGETS = {
-    "company": 1,              # 1 of 1   (CIO)
-    "engineering": 1,          # 1 of 1   (manager)
-    "platform": 4,             # 4 of 6   67%
-    "data": 4,                 # 4 of 5   80%
-    "ai_lab": 2,               # 2 of 3   hidden (<4)
-    "product_engineering": 4,  # 4 of 4   kept visible
-    "sales": 1,                # 1 of 1   (manager)
-    "enterprise_sales": 4,     # 4 of 5   80%
-    "smb_sales": 2,            # 2 of 3   hidden (<4)
-    "customer_operations": 0,  # 0 of 1
-    "core_support": 14,        # 14 of 20 70%
-    "customer_success": 12,    # 12 of 17 71%
+    # Company root: the CIO abstains, so there's no lone direct response to recover.
+    "company": 0,
+    # Department leadership cohorts (department + team managers, plus staff).
+    "engineering_leadership": 4,            # 4 of 5
+    "revenue_leadership": 4,                # 4 of 5
+    "customer_operations_leadership": 4,    # 4 of 4-5
+    # Engineering teams (ICs only).
+    "platform": 4,             # 4 of 6
+    "data": 4,                 # 4 of 6
+    "ai_lab": 2,               # 2 of 2   hidden (<4)
+    "product_engineering": 4,  # 4 of 6
+    # Revenue teams (ICs only).
+    "enterprise_sales": 4,     # 4 of 5
+    "smb_sales": 2,            # 2 of 2   hidden (<4)
+    # Customer Operations teams (ICs only).
+    "core_support": 14,        # 14 of 19
+    "customer_success": 12,    # 12 of 16
     "cx_research_pod": 2,      # 2 of 3   hidden (<4)
 }
 
@@ -269,6 +277,26 @@ CUSTOMER_OPS_EMPLOYEES.extend(
 EMPLOYEES.extend(CUSTOMER_OPS_EMPLOYEES)
 
 
+# Extra staff so the model holds up once team managers move into a department
+# Leadership team: leadership padding (to reach ~5 per leadership cohort) and a
+# couple of ICs so teams that would drop to exactly 4 keep a ~70-80% rate.
+LEADERSHIP_AND_STAFF = [
+    ("E300", "Sofia Reuter", "sofia.reuter@example.com", False),    # Revenue Leadership staff
+    ("E301", "Mark Lindgren", "mark.lindgren@example.com", False),  # Revenue Leadership staff
+    ("E302", "Nadia Holm", "nadia.holm@example.com", False),        # Customer Ops Leadership staff
+    ("E303", "Tomas Falk", "tomas.falk@example.com", False),        # Data Team IC
+    ("E304", "Greta Vidmar", "greta.vidmar@example.com", False),    # Enterprise Sales IC
+    ("E305", "Ada Nyholm", "ada.nyholm@example.com", False),        # CX Research Pod IC
+    # A few non-responding ICs so the Engineering teams sit nearer a ~70% rate
+    # (6 members, 4 respond) rather than 80%.
+    ("E306", "Viktor Sund", "viktor.sund@example.com", False),      # Platform Team IC
+    ("E307", "Hanna Roth", "hanna.roth@example.com", False),        # Data Team IC
+    ("E308", "Oskar Wahl", "oskar.wahl@example.com", False),        # Product Engineering IC
+]
+
+EMPLOYEES.extend(LEADERSHIP_AND_STAFF)
+
+
 
 def clamp(value: float, minimum: float, maximum: float) -> float:
     return max(minimum, min(maximum, value))
@@ -359,26 +387,46 @@ def create_org_snapshot(
     if include_cx_research_pod:
         add_unit("cx_research_pod", "CX Research Pod", "customer_operations", "E032")
 
+    # Department leadership teams. The department manager and that department's team
+    # managers (plus non-team staff) report here, so each team's score reflects its
+    # ICs only. No single person manages the leadership group. Created last so that,
+    # on a tie, secondary suppression hides an existing team rather than Leadership.
+    add_unit("engineering_leadership", "Engineering Leadership", "engineering", None)
+    add_unit("revenue_leadership", f"{sales_name} Leadership", "sales", None)
+    add_unit(
+        "customer_operations_leadership",
+        "Customer Operations Leadership",
+        "customer_operations",
+        None,
+    )
+
     memberships = {
+        # Company root holds only the CIO, who abstains from the survey.
         "company": ["E200"],
-        "engineering": ["E001"],
-        "sales": ["E002"],
 
-        "platform": ["E003", "E009", "E010", "E011", "E012", "E013"],
-        "data": ["E004", "E014", "E015", "E016", "E017"],
-        "ai_lab": ["E005", "E018", "E019"],
-        "product_engineering": ["E006", "E020", "E021", "E022", "E070", "E071"],
+        # Managers report in their department's Leadership cohort; teams are ICs only.
+        "engineering_leadership": ["E001", "E003", "E004", "E005", "E006"],
+        "platform": ["E009", "E010", "E011", "E012", "E013", "E306"],
+        "data": ["E014", "E015", "E016", "E017", "E303", "E307"],
+        "ai_lab": ["E018", "E019"],
+        "product_engineering": ["E020", "E021", "E022", "E070", "E071", "E308"],
 
-        "enterprise_sales": ["E007", "E023", "E024", "E025", "E026"],
-        "smb_sales": ["E008", "E027", "E028"],
+        "revenue_leadership": ["E002", "E007", "E008", "E300", "E301"],
+        "enterprise_sales": ["E023", "E024", "E025", "E026", "E304"],
+        "smb_sales": ["E027", "E028"],
 
-        "customer_operations": ["E029"],
-        "core_support": ["E030"] + [f"E{code:03d}" for code in range(33, 52)],
-        "customer_success": ["E031"] + [f"E{code:03d}" for code in range(52, 68)],
+        "core_support": [f"E{code:03d}" for code in range(33, 52)],
+        "customer_success": [f"E{code:03d}" for code in range(52, 68)],
     }
 
+    # CustOps leadership: Elin (CX Pod manager) only joins once the pod exists.
+    custops_leadership = ["E029", "E030", "E031", "E302"]
     if include_cx_research_pod:
-        memberships["cx_research_pod"] = ["E032", "E068", "E069"]
+        custops_leadership.append("E032")
+    memberships["customer_operations_leadership"] = custops_leadership
+
+    if include_cx_research_pod:
+        memberships["cx_research_pod"] = ["E068", "E069", "E305"]
 
     for org_key, employee_codes in memberships.items():
         for employee_code in employee_codes:
@@ -514,6 +562,9 @@ def score_for_answer(
         "core_support": {"Health": -0.1, "Workload": -0.4, "Leadership": 0.1, "Collaboration": 0.2, "eNPS": -0.1},
         "customer_success": {"Health": 0.2, "Workload": 0.1, "Leadership": 0.2, "Collaboration": 0.3, "eNPS": 0.6},
         "cx_research_pod": {"Health": -0.3, "Workload": -0.6, "Leadership": -0.3, "Collaboration": 0.0, "eNPS": -0.9},
+        "engineering_leadership": {"Health": 0.2, "Workload": -0.3, "Leadership": 0.3, "Collaboration": 0.2, "eNPS": 0.4},
+        "revenue_leadership": {"Health": 0.1, "Workload": -0.3, "Leadership": 0.2, "Collaboration": 0.2, "eNPS": 0.2},
+        "customer_operations_leadership": {"Health": 0.1, "Workload": -0.2, "Leadership": 0.2, "Collaboration": 0.3, "eNPS": 0.3},
     }
 
     category = QUESTION_CATEGORY[question_key]
@@ -842,11 +893,17 @@ def seed():
         print("- Julia Lind manages Sales / Revenue")
         print("- Marcus Eriksson manages Customer Operations")
         print()
+        print()
+        print("Org model:")
+        print("- Each department has a Leadership team (department + team managers + staff).")
+        print("  Managers report there, so each team's score reflects its ICs only.")
+        print("- The CIO (Magnus) abstains, so no lone response is recoverable at the company root.")
+        print()
         print("Important seeded edge cases:")
         print("- AI Lab (under Data Team) and SMB Sales fall below 4 respondents and are hidden")
         print("- CX Research Pod is a new 3-person team that appears only in the latest snapshot (Half-year 2026)")
-        print("- Customer Operations has ~40 eligible employees; at ~70% response its 3-person CX Research Pod is")
-        print("  hidden and one sibling is secondarily suppressed, while the department rollup stays visible")
+        print("- Customer Operations: the 3-person CX Research Pod is hidden, and the smallest visible sibling")
+        print("  (the Leadership team) is secondarily suppressed, while the department rollup stays visible")
         print("- eNPS is a separate monthly pulse (the latest month is left active for live submission)")
         print("- Category scores vary by function so dashboards show clearer trends")
 

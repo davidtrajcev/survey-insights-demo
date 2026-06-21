@@ -117,13 +117,19 @@ Open `http://127.0.0.1:8000` (health check at `/health`).
 
 ### Seeded edge cases
 
+- **Managers report in a department Leadership team** (the department manager plus
+  that department's team managers and staff), so each team's score reflects its
+  ICs only — and no rollup unit is exposed by a lone manager's own response.
 - **AI Lab** and **SMB Sales** have fewer than 4 respondents → hidden.
-- **Secondary suppression** fires where a lone hidden child would otherwise be
-  recoverable (e.g. in the Sales/Revenue and Customer Operations branches).
+- **Secondary suppression** fires where a hidden team would otherwise be
+  recoverable by subtraction: in **Revenue**, Enterprise Sales is suppressed to
+  protect SMB Sales; in **Customer Operations**, the smallest visible sibling (the
+  Leadership team) is suppressed to protect the CX Research Pod.
 - **Customer Operations** has roughly 40 eligible employees; in the latest cycle
-  28 responded, including two from the new three-person **CX Research Pod** that
-  appears only in the latest snapshot. The department rollup stays visible while
-  the pod and one sibling breakdown are suppressed.
+  ~30 responded, including two from the new three-person **CX Research Pod** that
+  appears only in the latest snapshot. The department rollup and the larger teams
+  (Core Support, Customer Success) stay visible, while the pod and the smallest
+  sibling are suppressed.
 - The **eNPS monthly pulse** runs Jul 2025 → Jun 2026 and climbs from
   net-negative to net-positive.
 

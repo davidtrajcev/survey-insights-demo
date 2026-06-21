@@ -1201,6 +1201,51 @@ td:first-child {
     margin-right: 6px;
 }
 
+/* Foldable org-tree rows */
+.tree-toggle {
+    display: inline-block;
+    width: 16px;
+    margin-right: 2px;
+    text-align: center;
+    font-size: 0.8rem;
+    line-height: 1;
+    color: var(--ink-3);
+    user-select: none;
+}
+
+.tree-toggle.is-toggle {
+    color: var(--accent-600);
+}
+
+/* The whole parent row toggles its subtree. */
+tr.is-foldable {
+    cursor: pointer;
+}
+
+tr.is-foldable:hover {
+    background: var(--accent-soft);
+}
+
+.tree-alltoggle {
+    align-self: center;
+    flex-shrink: 0;
+    padding: 9px 16px;
+    border: 0;
+    border-radius: var(--r-sm);
+    background: var(--accent-600);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(79, 70, 229, 0.22);
+    transition: transform 0.08s, box-shadow 0.15s, background 0.15s;
+}
+
+.tree-alltoggle:hover {
+    background: var(--accent-700);
+    transform: translateY(-1px);
+}
+
 .org-link {
     color: inherit;
     text-decoration: none;

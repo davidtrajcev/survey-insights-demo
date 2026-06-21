@@ -15,10 +15,14 @@ def get_survey_cycle(db: Session, survey_cycle_id: int) -> Optional[SurveyCycle]
 
 def get_latest_survey_cycle(db: Session) -> Optional[SurveyCycle]:
     # The annual/half-year engagement survey. eNPS pulses are a separate cadence
-    # and never count as the latest survey cycle.
+    # and never count as the latest survey cycle. Draft cycles aren't published
+    # yet, so they never surface to managers.
     return (
         db.query(SurveyCycle)
-        .filter(SurveyCycle.cycle_type.in_(["annual", "half_year"]))
+        .filter(
+            SurveyCycle.cycle_type.in_(["annual", "half_year"]),
+            SurveyCycle.status.in_(["active", "closed"]),
+        )
         .order_by(SurveyCycle.starts_on.desc())
         .first()
     )

@@ -15,3 +15,7 @@ venv/
 # Merge / patch artifacts
 *.orig
 *.rej
+presentation/interview-prep.md
+
+.claude
+presentation/interview-prep.md

@@ -1,4 +1,5 @@
 import json
+import os
 import uuid
 from datetime import date, datetime, timezone
 
@@ -71,6 +72,11 @@ app.add_middleware(
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
+# The case-presentation deck is a self-contained static file; serving it here lets
+# it be shown from the same localhost as the live demo (open /deck/).
+if os.path.isdir("presentation"):
+    app.mount("/deck", StaticFiles(directory="presentation", html=True), name="deck")
+
 templates = Jinja2Templates(directory="app/templates")
 
 
@@ -97,6 +103,18 @@ def response_type_label(value: str) -> str:
 
 
 templates.env.filters["response_type_label"] = response_type_label
+
+
+def asset_version() -> str:
+    # Cache-bust static assets by their file mtime, so an edited stylesheet is
+    # always picked up instead of a stale cached copy.
+    try:
+        return str(int(os.path.getmtime("app/static/styles.css")))
+    except OSError:
+        return "1"
+
+
+templates.env.globals["asset_version"] = asset_version
 
 
 # The annual/half-year survey covers four themes with three weighted questions
@@ -450,17 +468,22 @@ def build_team_comparison_chart_data(safe_report: dict, focus_category: str) -> 
         score = get_visible_score(unit.get("category_scores", []), focus_category)
         if score is None:
             continue
-        scored_units.append((unit.get("org_unit_name"), score))
+        scored_units.append(
+            (unit.get("org_unit_name"), score, unit.get("manager_employee_id"))
+        )
 
     # Sort teams lowest to highest on the focus category.
     scored_units.sort(key=lambda item: item[1])
 
-    labels = [name for name, _ in scored_units]
-    values = [score for _, score in scored_units]
+    labels = [name for name, _, _ in scored_units]
+    values = [score for _, score, _ in scored_units]
+    # Parallel to labels: the manager whose dashboard a bar links to (or null).
+    manager_ids = [manager_id for _, _, manager_id in scored_units]
 
     return {
         "focus_category": focus_category,
         "labels": labels,
+        "manager_ids": manager_ids,
         "datasets": [
             {
                 "label": focus_category,
@@ -770,6 +793,69 @@ def assert_can_view_manager_dashboard(
     return target_manager, target_org_unit, viewer_org_unit
 
 
+def _target_hidden_unit_in_viewer_mask(
+    db: Session,
+    current_employee: Employee,
+    viewer_org_unit: OrgUnitSnapshot,
+    target_org_unit: OrgUnitSnapshot,
+    cycle: SurveyCycle,
+) -> dict | None:
+    """
+    Shared primitive: for one cycle, is the target suppressed in the viewer's
+    broad scope?
+
+    Builds the viewer's privacy-safe report for `cycle`, then walks from the
+    target up to the viewer's root and returns the first hidden unit on that path
+    (or None if the target is fully visible to the viewer in that cycle). This
+    backs both the standalone-dashboard block and the per-pulse eNPS mask.
+    """
+
+    # A manager may always see their own root scope; only descendant navigation
+    # can be masked.
+    if viewer_org_unit.external_key == target_org_unit.external_key:
+        return None
+
+    historical_viewer_root = get_org_unit_by_external_key_for_cycle(
+        db=db,
+        external_key=viewer_org_unit.external_key,
+        survey_cycle_id=cycle.id,
+    )
+    historical_target_root = get_org_unit_by_external_key_for_cycle(
+        db=db,
+        external_key=target_org_unit.external_key,
+        survey_cycle_id=cycle.id,
+    )
+
+    if not historical_viewer_root or not historical_target_root:
+        return None
+
+    raw_viewer_report = get_org_unit_cycle_report(
+        db=db,
+        root_org_unit=historical_viewer_root,
+        survey_cycle_id=cycle.id,
+        manager_id=current_employee.id,
+    )
+
+    if not raw_viewer_report:
+        return None
+
+    safe_viewer_report = apply_privacy_to_manager_report(raw_viewer_report)
+    safe_units_by_id = {
+        unit.get("org_unit_id"): unit
+        for unit in safe_viewer_report.get("org_units", [])
+        if unit.get("org_unit_id") is not None
+    }
+
+    current_unit = safe_units_by_id.get(historical_target_root.id)
+
+    while current_unit and current_unit.get("org_unit_id") != historical_viewer_root.id:
+        if not current_unit.get("visible"):
+            return current_unit
+        current_unit = safe_units_by_id.get(current_unit.get("parent_id"))
+
+    return None
+
+
 def build_cross_dashboard_privacy_block(
     db: Session,
     current_employee: Employee,
@@ -792,67 +878,99 @@ def build_cross_dashboard_privacy_block(
     dashboard is blocked for that viewer and cycle.
     """
 
-    # A manager may always open their own root scope. The suppression mask only
-    # blocks navigation into descendant dashboards that were hidden in the
-    # manager's broader view.
-    if viewer_org_unit.external_key == target_org_unit.external_key:
-        return None
-
-    historical_viewer_root = get_org_unit_by_external_key_for_cycle(
+    hidden_unit = _target_hidden_unit_in_viewer_mask(
         db=db,
-        external_key=viewer_org_unit.external_key,
-        survey_cycle_id=selected_cycle.id,
-    )
-    historical_target_root = get_org_unit_by_external_key_for_cycle(
-        db=db,
-        external_key=target_org_unit.external_key,
-        survey_cycle_id=selected_cycle.id,
+        current_employee=current_employee,
+        viewer_org_unit=viewer_org_unit,
+        target_org_unit=target_org_unit,
+        cycle=selected_cycle,
     )
 
-    if not historical_viewer_root or not historical_target_root:
+    if not hidden_unit:
         return None
 
-    raw_viewer_report = get_org_unit_cycle_report(
-        db=db,
-        root_org_unit=historical_viewer_root,
-        survey_cycle_id=selected_cycle.id,
-        manager_id=current_employee.id,
-    )
-
-    if not raw_viewer_report:
-        return None
-
-    safe_viewer_report = apply_privacy_to_manager_report(raw_viewer_report)
-    safe_units_by_id = {
-        unit.get("org_unit_id"): unit
-        for unit in safe_viewer_report.get("org_units", [])
-        if unit.get("org_unit_id") is not None
+    return {
+        "blocked": True,
+        "blocked_org_unit_name": hidden_unit.get("org_unit_name"),
+        "requested_org_unit_name": target_org_unit.name,
+        "viewer_scope_name": viewer_org_unit.name,
+        "survey_cycle_name": selected_cycle.name,
+        "reason": hidden_unit.get("reason") or "Hidden by privacy suppression",
+        "privacy_note": hidden_unit.get("privacy_note"),
+        "message": (
+            f"{target_org_unit.name} is hidden for your {viewer_org_unit.name} "
+            f"view in {selected_cycle.name}. Opening it as a standalone "
+            "dashboard would bypass the suppression mask and could reveal "
+            "a smaller team."
+        ),
     }
 
-    current_unit = safe_units_by_id.get(historical_target_root.id)
 
-    while current_unit and current_unit.get("org_unit_id") != historical_viewer_root.id:
-        if not current_unit.get("visible"):
-            return {
-                "blocked": True,
-                "blocked_org_unit_name": current_unit.get("org_unit_name"),
-                "requested_org_unit_name": target_org_unit.name,
-                "viewer_scope_name": viewer_org_unit.name,
-                "survey_cycle_name": selected_cycle.name,
-                "reason": current_unit.get("reason") or "Hidden by privacy suppression",
-                "privacy_note": current_unit.get("privacy_note"),
-                "message": (
-                    f"{target_org_unit.name} is hidden for your {viewer_org_unit.name} "
-                    f"view in {selected_cycle.name}. Opening it as a standalone "
-                    "dashboard would bypass the suppression mask and could reveal "
-                    "a smaller team."
+def apply_cross_dashboard_mask_to_enps_pulse(
+    db: Session,
+    current_employee: Employee,
+    viewer_org_unit: OrgUnitSnapshot,
+    target_org_unit: OrgUnitSnapshot,
+    enps_pulse_rows: list[dict],
+) -> list[dict]:
+    """
+    Closes the eNPS counterpart of the cross-dashboard leak.
+
+    The standalone-dashboard block only checks the *selected* annual/half-year
+    cycle, but the eNPS chart shows the full pulse history regardless of that
+    selection. Without this, a viewer could open a descendant dashboard for a
+    cycle where the block doesn't fire and still read a pulse score that is
+    masked in their current view — recovering a hidden cohort by subtraction.
+
+    So every pulse is treated as its own privacy publication: a pulse point is
+    shown only when the target is also visible in the viewer's broad scope for
+    that pulse's own cycle/snapshot.
+    """
+
+    # Own dashboard: nothing to mask (a manager always sees their own scope).
+    if viewer_org_unit.external_key == target_org_unit.external_key:
+        return enps_pulse_rows
+
+    masked_rows = []
+
+    for row in enps_pulse_rows:
+        # Already hidden by the primary <4 check — leave it as is.
+        if not row.get("visible"):
+            masked_rows.append(row)
+            continue
+
+        pulse_cycle = get_survey_cycle(db, row.get("survey_cycle_id"))
+        hidden_unit = (
+            _target_hidden_unit_in_viewer_mask(
+                db=db,
+                current_employee=current_employee,
+                viewer_org_unit=viewer_org_unit,
+                target_org_unit=target_org_unit,
+                cycle=pulse_cycle,
+            )
+            if pulse_cycle
+            else None
+        )
+
+        if not hidden_unit:
+            masked_rows.append(row)
+            continue
+
+        masked_rows.append(
+            {
+                "survey_cycle_id": row.get("survey_cycle_id"),
+                "survey_cycle_name": row.get("survey_cycle_name"),
+                "starts_on": row.get("starts_on"),
+                "root_org_unit_name": row.get("root_org_unit_name"),
+                "visible": False,
+                "reason": (
+                    "Hidden because this team is suppressed in your broader view "
+                    "for this pulse"
                 ),
             }
+        )
 
-        parent_id = current_unit.get("parent_id")
-        current_unit = safe_units_by_id.get(parent_id)
-
-    return None
+    return masked_rows
 
 
 def parse_numeric_answer(
@@ -896,10 +1014,14 @@ def build_manager_dashboard_context(
     )
 
     # The cycle selector is for the annual/half-year survey; eNPS pulses are a
-    # separate cadence and are not selectable here.
+    # separate cadence and are not selectable here. Draft cycles aren't published
+    # yet, so they never appear in a manager's selector or trend.
     cycles = (
         db.query(SurveyCycle)
-        .filter(SurveyCycle.cycle_type.in_(["annual", "half_year"]))
+        .filter(
+            SurveyCycle.cycle_type.in_(["annual", "half_year"]),
+            SurveyCycle.status.in_(["active", "closed"]),
+        )
         .order_by(SurveyCycle.starts_on)
         .all()
     )
@@ -1093,6 +1215,17 @@ def build_manager_dashboard_context(
             db=db,
             current_org_unit_external_key=current_target_org_unit.external_key,
         )
+    )
+
+    # The standalone-dashboard block only covers the selected survey cycle; the
+    # eNPS history ignores that selection, so mask each pulse against the viewer's
+    # broad scope too — otherwise a suppressed team's pulse leaks through here.
+    enps_pulse = apply_cross_dashboard_mask_to_enps_pulse(
+        db=db,
+        current_employee=current_employee,
+        viewer_org_unit=viewer_org_unit,
+        target_org_unit=current_target_org_unit,
+        enps_pulse_rows=enps_pulse,
     )
 
     enps_chart_data = {
@@ -1351,9 +1484,12 @@ def close_survey_cycle(
 
 @app.get("/login")
 def login_page(request: Request, db: Session = Depends(get_db)):
+    # Ordered as a top-down demo path: CIO (whole company) → a department →
+    # a department with suppression → an employee → the P&C admin.
     featured_names = [
-        "Marcus Eriksson",
+        "Magnus Ahlberg",
         "Olivia Ivkovic",
+        "Marcus Eriksson",
         "David Trajcev",
         "Petra Lindqvist",
     ]
@@ -1558,6 +1694,58 @@ async def submit_survey(
 
     form_data = await request.form()
 
+    # Validate every answer first, so an invalid submission never claims the slot.
+    validated_answers = []
+    for question in questions:
+        if question.response_type == "text":
+            # Free text is not stored in this MVP because comments can identify
+            # their author even when numeric scores are aggregated.
+            continue
+
+        numeric_value = parse_numeric_answer(
+            raw_value=form_data.get(f"question_{question.id}"),
+            question=question,
+        )
+        validated_answers.append((question, numeric_value))
+
+    # Atomically claim the participant: flip has_submitted false -> true in a
+    # single conditional UPDATE. Only one of two concurrent requests can match the
+    # `has_submitted is False` predicate, so the slot is claimed exactly once.
+    # Without this, both requests could pass the read check above and each write
+    # an anonymous response, inflating the respondent count (e.g. 3 -> 4) and
+    # exposing a team that should have stayed below the suppression threshold.
+    submitted_at = datetime.now(timezone.utc)
+    claimed_rows = (
+        db.query(SurveyParticipant)
+        .filter(
+            SurveyParticipant.id == participant.id,
+            SurveyParticipant.employee_id == current_employee.id,
+            SurveyParticipant.has_submitted.is_(False),
+        )
+        .update(
+            {"has_submitted": True, "submitted_at": submitted_at},
+            synchronize_session=False,
+        )
+    )
+
+    if claimed_rows == 0:
+        # The slot was already used (including by a concurrent request that won
+        # the race), so we reject without writing a second response.
+        db.rollback()
+        return templates.TemplateResponse(
+            request=request,
+            name="survey_submitted.html",
+            context={
+                "title": "Survey Already Submitted",
+                "current_user": current_employee,
+                "participant": participant,
+                "already_submitted": True,
+            },
+            status_code=409,
+        )
+
+    # The claim and the anonymous response are written in one transaction, so a
+    # failed response insert rolls the claim back and the slot stays usable.
     submission = ResponseSubmission(
         anonymous_response_id=str(uuid.uuid4()),
         survey_cycle=participant.survey_cycle,
@@ -1567,30 +1755,21 @@ async def submit_survey(
     db.add(submission)
     db.flush()
 
-    for question in questions:
-        field_name = f"question_{question.id}"
-
-        if question.response_type == "text":
-            # Free text is not stored in this MVP because comments can identify
-            # their author even when numeric scores are aggregated.
-            continue
-
-        numeric_value = parse_numeric_answer(
-            raw_value=form_data.get(field_name),
-            question=question,
+    for question, numeric_value in validated_answers:
+        db.add(
+            ResponseAnswer(
+                submission=submission,
+                question=question,
+                numeric_value=numeric_value,
+            )
         )
-        answer = ResponseAnswer(
-            submission=submission,
-            question=question,
-            numeric_value=numeric_value,
-        )
-
-        db.add(answer)
-
-    participant.has_submitted = True
-    participant.submitted_at = datetime.now(timezone.utc)
 
     db.commit()
+
+    # The bulk UPDATE above bypasses the unit of work, so reflect the claim on the
+    # loaded object for the confirmation page.
+    participant.has_submitted = True
+    participant.submitted_at = submitted_at
 
     return templates.TemplateResponse(
         request=request,

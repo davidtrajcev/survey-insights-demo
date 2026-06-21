@@ -354,9 +354,10 @@
             <h3>Org tree results</h3>
             <p>Managers see their org unit and all child units, after privacy suppression.</p>
         </div>
+        <button type="button" class="tree-alltoggle" id="orgTreeAllToggle" hidden>Expand all</button>
     </div>
 
-    <table>
+    <table id="orgTreeTable">
         <thead>
             <tr>
                 <th>Org unit</th>
@@ -370,8 +371,9 @@
         </thead>
         <tbody>
             {% for unit in report.org_units %}
-            <tr class="{% if not unit.visible %}hidden-row{% endif %}">
+            <tr class="org-row {% if not unit.visible %}hidden-row{% endif %}" data-depth="{{ unit.depth }}">
                 <td style="padding-left: {{ 16 + (unit.depth * 24) }}px">
+                    <span class="tree-toggle" aria-hidden="true"></span>
                     {% if unit.depth > 0 %}<span class="tree-marker">↳</span>{% endif %}
                     {% if unit.depth > 0 and unit.manager_employee_id %}
                         <a class="org-link" href="/manager/{{ unit.manager_employee_id }}?cycle_id={{ selected_cycle.id }}">{{ unit.org_unit_name }}</a>
@@ -414,6 +416,82 @@
     </table>
 </section>
 
+<script>
+    // Make the org-tree table foldable: each parent row gets a caret that
+    // collapses/expands its subtree, and an "Expand all / Collapse all" control.
+    // Folding is depth-based (the rows are a pre-order traversal), so a row is
+    // hidden whenever any of its ancestors is collapsed.
+    (function () {
+        const table = document.getElementById("orgTreeTable");
+        if (!table) return;
+        const rows = Array.from(table.querySelectorAll("tr.org-row"));
+        if (!rows.length) return;
+
+        const depths = rows.map((row) => parseInt(row.dataset.depth, 10) || 0);
+
+        // Nearest preceding row with a smaller depth is the parent.
+        const parents = rows.map(() => -1);
+        for (let i = 0; i < rows.length; i++) {
+            for (let j = i - 1; j >= 0; j--) {
+                if (depths[j] < depths[i]) { parents[i] = j; break; }
+            }
+        }
+        const hasChildren = rows.map((_, i) => i + 1 < rows.length && depths[i + 1] > depths[i]);
+        const collapsed = rows.map(() => false);
+        const allToggle = document.getElementById("orgTreeAllToggle");
+
+        const isHidden = (i) => {
+            for (let p = parents[i]; p !== -1; p = parents[p]) {
+                if (collapsed[p]) return true;
+            }
+            return false;
+        };
+
+        function render() {
+            rows.forEach((row, i) => {
+                row.style.display = isHidden(i) ? "none" : "";
+                if (hasChildren[i]) {
+                    row.querySelector(".tree-toggle").textContent = collapsed[i] ? "▸" : "▾";
+                }
+            });
+            if (allToggle) {
+                const anyCollapsed = collapsed.some((c, i) => c && hasChildren[i]);
+                allToggle.textContent = anyCollapsed ? "Expand all" : "Collapse all";
+            }
+        }
+
+        rows.forEach((row, i) => {
+            if (!hasChildren[i]) return;
+            // The whole parent row is the toggle target (the caret is just an
+            // indicator); a click on the team-name link still navigates.
+            row.classList.add("is-foldable");
+            row.querySelector(".tree-toggle").classList.add("is-toggle");
+            row.title = "Click to expand / collapse";
+            row.addEventListener("click", (e) => {
+                if (e.target.closest("a")) return;
+                collapsed[i] = !collapsed[i];
+                render();
+            });
+        });
+
+        if (allToggle && hasChildren.some(Boolean)) {
+            allToggle.hidden = false;
+            allToggle.addEventListener("click", () => {
+                const anyCollapsed = collapsed.some((c, i) => c && hasChildren[i]);
+                rows.forEach((_, i) => {
+                    // Expand everything, or collapse to the top two levels (keep the root open).
+                    collapsed[i] = anyCollapsed ? false : (hasChildren[i] && depths[i] >= 1);
+                });
+                render();
+            });
+        }
+
+        // Default to a compact view (top two levels) so it isn't one big table.
+        rows.forEach((_, i) => { if (hasChildren[i] && depths[i] >= 1) collapsed[i] = true; });
+        render();
+    })();
+</script>
+
 {% if report.inference_risks %}
 <section class="risk-box">
     <h3>Inference risks mitigated</h3>
@@ -443,7 +521,8 @@
     </ul>
 </section>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<!-- Chart.js is vendored locally (app/static/vendor) so the dashboard works offline / behind a blocked CDN. -->
+<script src="/static/vendor/chart.umd.min.js"></script>
 <script>
     const chartData = {{ chart_data_json | safe }};
     const enpsChartData = {{ enps_chart_data_json | safe }};
@@ -538,6 +617,12 @@
 
     const teamComparisonCtx = document.getElementById("teamComparisonChart");
     if (teamComparisonCtx && window.Chart) {
+        const teamManagerIds = teamComparisonChartData.manager_ids || [];
+        const teamCycleId = {{ selected_cycle.id }};
+        const teamDashboardUrl = (index) => {
+            const managerId = teamManagerIds[index];
+            return managerId ? `/manager/${managerId}?cycle_id=${teamCycleId}` : null;
+        };
         new Chart(teamComparisonCtx, {
             type: "bar",
             data: teamComparisonChartData,
@@ -545,6 +630,18 @@
                 indexAxis: "y",
                 responsive: true,
                 maintainAspectRatio: false,
+                // Clicking a team bar drills into that team's manager dashboard.
+                onClick: (event, elements) => {
+                    if (!elements.length) return;
+                    const url = teamDashboardUrl(elements[0].index);
+                    if (url) window.location.href = url;
+                },
+                // Show a pointer cursor only over bars that link somewhere.
+                onHover: (event, elements) => {
+                    if (!event.native) return;
+                    const linkable = elements.length && teamDashboardUrl(elements[0].index);
+                    event.native.target.style.cursor = linkable ? "pointer" : "default";
+                },
                 plugins: {
                     legend: { display: false },
                     title: {

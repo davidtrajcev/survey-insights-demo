@@ -403,9 +403,13 @@ def get_enps_pulse_trend(
 
     from app.models import SurveyCycle
 
+    # Draft pulses aren't published, so they never appear in the eNPS trend.
     pulses = (
         db.query(SurveyCycle)
-        .filter(SurveyCycle.cycle_type == "enps_pulse")
+        .filter(
+            SurveyCycle.cycle_type == "enps_pulse",
+            SurveyCycle.status.in_(["active", "closed"]),
+        )
         .order_by(SurveyCycle.starts_on)
         .all()
     )
@@ -463,9 +467,13 @@ def get_org_unit_trends(
 
     from app.models import SurveyCycle
 
+    # Draft cycles aren't published, so they never appear in a manager's trend.
     cycles = (
         db.query(SurveyCycle)
-        .filter(SurveyCycle.cycle_type.in_(["annual", "half_year"]))
+        .filter(
+            SurveyCycle.cycle_type.in_(["annual", "half_year"]),
+            SurveyCycle.status.in_(["active", "closed"]),
+        )
         .order_by(SurveyCycle.starts_on)
         .all()
     )

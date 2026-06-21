@@ -148,6 +148,10 @@ def apply_threshold_to_rollup(
         # Keep internally for privacy calculations only. The template should use
         # respondent_count/respondent_count_label for display.
         "_raw_respondent_count": respondent_count,
+        # Direct-at-parent respondents (not in any child unit). Used by secondary
+        # suppression to model the direct cohort as an implicit child, so it can't
+        # be recovered by subtracting the visible children from the parent total.
+        "_raw_direct_respondent_count": rollup.get("direct_respondent_count", 0),
     }
 
     if not safe_rollup["visible"]:
@@ -218,14 +222,27 @@ def apply_secondary_suppression_to_org_units(
     safe_org_units: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     """
-    Closes the simplest differencing leak.
+    Closes the differencing leak.
 
-    If a visible parent has exactly one hidden immediate child, a manager can
-    subtract the visible children from the parent total to recover the hidden
-    child. To prevent that, hide the smallest visible sibling too.
+    A manager can subtract the visible children from a visible parent total to
+    recover the *combined* cohort of everything not shown:
+
+        residual = parent total - sum(visible children)
+                 = direct-at-parent respondents + sum(hidden children)
+
+    If that residual is between 1 and MIN_RESPONDENTS - 1 it exposes a
+    sub-threshold group — whether it is one hidden child, several small ones
+    summed together (e.g. 1 + 2 = 3), the parent's own direct respondents (e.g. a
+    lone manager whose individual answer is recoverable), or a mix. Direct
+    respondents are therefore modelled as an implicit child cohort.
+
+    To close it we fold the smallest visible sibling into the residual. Every
+    visible sibling has at least MIN_RESPONDENTS, so hiding one always lifts the
+    residual to >= the threshold. A residual of exactly 0 (parent equals its
+    visible children) needs nothing.
 
     This runs to a fixpoint because suppressing one sibling can create a new
-    lone-hidden-child situation higher up the tree.
+    sub-threshold residual higher up the tree.
     """
 
     risks = []
@@ -246,36 +263,75 @@ def apply_secondary_suppression_to_org_units(
             if not parent or not parent.get("visible"):
                 continue
 
-            hidden_children = [child for child in children if not child.get("visible")]
             visible_children = [child for child in children if child.get("visible")]
+            hidden_children = [child for child in children if not child.get("visible")]
 
-            if len(hidden_children) != 1 or not visible_children:
+            # A subtraction attack needs at least one visible sibling to subtract
+            # from the parent total.
+            if not visible_children:
                 continue
 
-            hidden_child = hidden_children[0]
+            # The recoverable residual is the parent's direct respondents plus every
+            # hidden child. Direct respondents are treated as an implicit child
+            # cohort so a lone manager's own answer can't be backed out either.
+            direct_count = parent.get("_raw_direct_respondent_count", 0)
+            hidden_sum = sum(
+                child.get("_raw_respondent_count", 0) for child in hidden_children
+            )
+            residual = direct_count + hidden_sum
+
+            # 0 -> nothing left to recover. >= threshold -> the recovered cohort is
+            # too large to isolate a sub-threshold group. Either way, safe.
+            if residual == 0 or residual >= MIN_RESPONDENTS:
+                continue
+
+            # Every visible sibling is >= MIN_RESPONDENTS, so hiding the smallest
+            # one lifts the residual to >= the threshold in a single step.
             sibling_to_hide = min(
                 visible_children,
                 key=lambda child: child.get("_raw_respondent_count", 10**9),
             )
 
+            parent_name = parent.get("org_unit_name", "the parent org")
+            protected_parts = [
+                child.get("org_unit_name") or "a hidden team" for child in hidden_children
+            ]
+            if direct_count > 0:
+                protected_parts.append(f"{parent_name}'s direct responses")
+
+            if len(protected_parts) == 1:
+                protected_label = protected_parts[0]
+            elif len(protected_parts) == 2:
+                protected_label = f"{protected_parts[0]} and {protected_parts[1]}"
+            else:
+                protected_label = ", ".join(protected_parts[:-1]) + f", and {protected_parts[-1]}"
+
             _suppress_unit_for_secondary_privacy(
                 unit=sibling_to_hide,
-                protected_child_name=hidden_child.get("org_unit_name", "the hidden team"),
-                parent_name=parent.get("org_unit_name", "the parent org"),
+                protected_child_name=protected_label,
+                parent_name=parent_name,
             )
 
             risks.append(
                 {
                     "parent_org_unit_id": parent_id,
                     "parent_org_unit_name": parent.get("org_unit_name"),
-                    "hidden_child_org_unit_id": hidden_child.get("org_unit_id"),
-                    "hidden_child_org_unit_name": hidden_child.get("org_unit_name"),
+                    "hidden_child_org_unit_id": (
+                        hidden_children[0].get("org_unit_id")
+                        if len(hidden_children) == 1 and direct_count == 0
+                        else None
+                    ),
+                    "hidden_child_org_unit_name": protected_label,
                     "secondary_hidden_org_unit_id": sibling_to_hide.get("org_unit_id"),
                     "secondary_hidden_org_unit_name": sibling_to_hide.get("org_unit_name"),
-                    "risk": "A single hidden child would be inferable from the visible parent total and sibling rows.",
+                    "risk": (
+                        "The combined residual (hidden teams plus the parent's own "
+                        "direct responses) would be inferable from the visible parent "
+                        "total and sibling rows."
+                    ),
                     "mitigation_applied": (
                         f"Also hid {sibling_to_hide.get('org_unit_name')} to protect "
-                        f"{hidden_child.get('org_unit_name')}."
+                        f"{protected_label}."
                     ),
                 }
             )

@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Survey platform — case presentation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --accent: #6366f1;
+    --accent-600: #4f46e5;
+    --accent-700: #4338ca;
+    --accent-soft: #eef2ff;
+    --canvas: #eef2f7;
+    --surface: #ffffff;
+    --surface-2: #f8fafc;
+    --ink: #0f172a;
+    --ink-2: #475569;
+    --ink-3: #94a3b8;
+    --line: #e6eaf1;
+    --line-strong: #cdd5e1;
+    --c-health: #10b981;
+    --c-workload: #f59e0b;
+    --c-leadership: #8b5cf6;
+    --c-collaboration: #0ea5e9;
+    --c-enps: #ec4899;
+    --good: #16a34a;
+    --good-soft: #ecfdf5;
+    --warn: #ea580c;
+    --warn-soft: #fff7ed;
+    --bad: #dc2626;
+    --bad-soft: #fef2f2;
+    --r-sm: 8px;
+    --r: 12px;
+    --r-lg: 16px;
+    --r-xl: 22px;
+    --pill: 999px;
+    --shadow: 0 6px 18px rgba(15, 23, 42, 0.07);
+    --shadow-lg: 0 18px 40px rgba(15, 23, 42, 0.12);
+    --font: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: var(--font);
+    color: var(--ink);
+    background:
+      radial-gradient(1200px 480px at 100% -10%, rgba(99, 102, 241, 0.10), transparent 60%),
+      radial-gradient(1000px 420px at -10% 0%, rgba(14, 165, 233, 0.08), transparent 55%),
+      var(--canvas);
+    overflow: hidden;
+  }
+
+  .deck { position: fixed; inset: 0; }
+
+  .slide {
+    position: absolute; inset: 0;
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    padding: 6vh 8vw;
+    max-width: 1180px;
+    margin: 0 auto;
+    animation: fade 0.28s ease;
+  }
+  .slide.active { display: flex; }
+  @keyframes fade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+  .eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--accent-600);
+    margin: 0 0 14px;
+  }
+  h1 { font-size: clamp(2.2rem, 5.2vw, 3.6rem); line-height: 1.05; margin: 0 0 18px; font-weight: 800; letter-spacing: -0.02em; }
+  h2 { font-size: clamp(1.6rem, 3.6vw, 2.5rem); line-height: 1.1; margin: 0 0 22px; font-weight: 800; letter-spacing: -0.015em; }
+  h3 { font-size: 1.05rem; margin: 0 0 8px; font-weight: 700; }
+  p { font-size: clamp(1rem, 1.5vw, 1.18rem); line-height: 1.5; color: var(--ink-2); margin: 0 0 14px; }
+  .lead { font-size: clamp(1.1rem, 1.8vw, 1.35rem); color: var(--ink); max-width: 60ch; }
+  strong { color: var(--ink); font-weight: 700; }
+
+  ul.clean { list-style: none; padding: 0; margin: 0; display: grid; gap: 14px; }
+  ul.clean li { font-size: clamp(1rem, 1.5vw, 1.18rem); line-height: 1.45; color: var(--ink-2); padding-left: 30px; position: relative; }
+  ul.clean li::before { content: "›"; position: absolute; left: 4px; top: -1px; color: var(--accent-600); font-weight: 800; font-size: 1.25em; }
+  ul.clean li strong { color: var(--ink); }
+
+  .grid { display: grid; gap: 16px; }
+  .grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
+  .grid.cols-2 { grid-template-columns: repeat(2, 1fr); }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r-lg);
+    padding: 22px 22px;
+    box-shadow: var(--shadow);
+  }
+  .card .num { font-size: 0.8rem; font-weight: 800; color: var(--accent-600); letter-spacing: 0.06em; }
+  .card h3 { margin: 8px 0 8px; font-size: 1.12rem; }
+  .card p { font-size: 0.96rem; margin: 0; }
+  .card .tag { display: inline-block; margin-top: 12px; font-size: 0.74rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent-700); background: var(--accent-soft); padding: 4px 10px; border-radius: var(--pill); }
+  a.tag-link { text-decoration: none; cursor: pointer; transition: background 0.15s, color 0.15s, transform 0.08s; }
+  a.tag-link:hover { background: var(--accent-600); color: #fff; transform: translateY(-1px); }
+
+  .pill { display: inline-block; font-size: 0.74rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; padding: 5px 12px; border-radius: var(--pill); }
+  .pill.warn { background: var(--warn-soft); color: var(--warn); }
+  .pill.good { background: var(--good-soft); color: var(--good); }
+  .pill.demo { background: #0f172a; color: #fff; }
+
+  .accent-bar { width: 64px; height: 6px; border-radius: 999px; background: linear-gradient(90deg, var(--accent), var(--c-collaboration)); margin: 0 0 26px; }
+
+  .footer-meta { position: absolute; left: 8vw; bottom: 4vh; font-size: 0.82rem; color: var(--ink-3); font-weight: 500; }
+
+  /* Title slide */
+  .title-slide h1 { max-width: 18ch; }
+  .title-slide .sub { font-size: clamp(1.05rem, 1.8vw, 1.3rem); color: var(--ink-2); max-width: 52ch; }
+  .byline { margin-top: 30px; font-size: 0.95rem; color: var(--ink-3); }
+  .byline b { color: var(--ink-2); }
+
+  /* Differencing attack visual */
+  .attack { display: flex; align-items: stretch; gap: 14px; flex-wrap: wrap; margin: 6px 0 18px; }
+  .box { border-radius: var(--r); padding: 14px 16px; min-width: 104px; text-align: center; border: 1px solid var(--line); background: var(--surface); }
+  .box .b-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-3); font-weight: 700; }
+  .box .b-num { font-size: 1.5rem; font-weight: 800; margin-top: 4px; }
+  .box.dept { background: var(--accent-soft); border-color: #c7d2fe; }
+  .box.visible { background: var(--surface); }
+  .box.hidden { background: var(--bad-soft); border-color: #fecaca; }
+  .box.hidden .b-num { color: var(--bad); }
+  .op { display: flex; align-items: center; font-size: 1.5rem; font-weight: 800; color: var(--ink-3); }
+  .leak { font-family: var(--mono); font-size: 1.05rem; background: #0f172a; color: #fff; padding: 12px 16px; border-radius: var(--r); display: inline-block; }
+  .leak .red { color: #fca5a5; }
+
+  /* org timeline */
+  .timeline { display: flex; gap: 0; align-items: stretch; margin: 8px 0 16px; flex-wrap: wrap; }
+  .tl-step { flex: 1; min-width: 150px; border-left: 3px solid var(--accent); padding: 4px 14px 14px; }
+  .tl-step .when { font-size: 0.78rem; font-weight: 700; color: var(--accent-600); text-transform: uppercase; letter-spacing: 0.06em; }
+  .tl-step .what { font-size: 0.95rem; color: var(--ink-2); margin-top: 4px; }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; align-items: center; }
+  .demo-list li::before { content: "▸"; }
+
+  .kbd { font-family: var(--mono); font-size: 0.8rem; background: var(--surface); border: 1px solid var(--line-strong); border-bottom-width: 2px; border-radius: 6px; padding: 2px 7px; color: var(--ink-2); }
+
+  /* progress + chrome */
+  .progress { position: fixed; top: 0; left: 0; height: 4px; background: linear-gradient(90deg, var(--accent), var(--c-collaboration)); transition: width 0.3s ease; z-index: 50; }
+  .counter { position: fixed; right: 20px; bottom: 16px; font-size: 0.8rem; color: var(--ink-3); font-weight: 600; z-index: 50; }
+  .hint { position: fixed; left: 20px; bottom: 16px; font-size: 0.74rem; color: var(--ink-3); z-index: 50; }
+  .brand-dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), var(--c-collaboration)); vertical-align: middle; margin-right: 8px; }
+
+  @media (max-width: 820px) {
+    .grid.cols-3, .grid.cols-2, .two-col { grid-template-columns: 1fr; }
+    .slide { padding: 5vh 7vw; }
+  }
+</style>
+</head>
+<body>
+<div class="progress" id="progress"></div>
+<div class="deck" id="deck">
+
+  <!-- 1. TITLE -->
+  <section class="slide title-slide">
+    <p class="eyebrow"><span class="brand-dot"></span>Voyado · Internal IT · AI Engineer case</p>
+    <h1>An employee survey platform we own — and that managers actually trust.</h1>
+    <p class="sub">Replacing Eletive with a privacy-first, org-aware feedback system: anonymity that holds under inference, org changes that don't rewrite history, and trends managers act on.</p>
+    <div class="byline">A working demo + the design behind it · <b>David Trajchev</b></div>
+    <div class="footer-meta">Built with FastAPI · SQLite · Chart.js — running live in the next tab</div>
+  </section>
+
+  <!-- 2. THE BRIEF / WHAT'S HARD -->
+  <section class="slide">
+    <p class="eyebrow">The brief, decoded</p>
+    <h2>The survey is the easy part.</h2>
+    <div class="two-col">
+      <div>
+        <p>P&amp;C asked for: two cycles a year (annual + half-year), a continuous eNPS pulse, four themes — <strong>health, workload, leadership, collaboration</strong> — manager reporting down the org tree, a <strong>&lt;4 anonymity rule</strong>, support for org changes, trends over time, ~70% response, and "<strong>simple enough that managers use it.</strong>"</p>
+      </div>
+      <div>
+        <ul class="clean">
+          <li><strong>Anonymity that actually holds</strong> — the &lt;4 rule alone leaks.</li>
+          <li><strong>Org changes that don't rewrite history</strong> — reorgs are constant.</li>
+          <li><strong>Adoption</strong> — insight in one glance, or it goes unused.</li>
+        </ul>
+        <p style="margin-top:18px;font-weight:600;color:var(--ink)">Those three are where I spent my design effort.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. THREE QUESTIONS -->
+  <section class="slide">
+    <p class="eyebrow">What's missing before I build</p>
+    <h2>Three questions — each changes the data model, the access logic, or the scope.</h2>
+    <div class="grid cols-3">
+      <div class="card">
+        <span class="num">01</span>
+        <h3>What's the main action a manager takes from a result?</h3>
+        <p>Read-and-follow-up-offline, or alerts / action plans / tracking?</p>
+        <span class="tag">Decides scope: dashboard vs workflow</span>
+      </div>
+      <div class="card">
+        <span class="num">02</span>
+        <h3>When a team moves departments, who sees its pre-move history?</h3>
+        <p>Does January's data follow the team to its new department head?</p>
+        <span class="tag">Decides data model + access</span>
+      </div>
+      <div class="card">
+        <span class="num">03</span>
+        <h3>Strict tree, or matrix — multiple teams / managers?</h3>
+        <p>Does each response have one clear path up the org?</p>
+        <span class="tag">Decides attribution + anonymity</span>
+      </div>
+    </div>
+    <p style="margin-top:22px">I built the MVP on a clear default for each — and the design flexes if the answers differ.</p>
+  </section>
+
+  <!-- 4. THE REAL PROBLEM -->
+  <section class="slide">
+    <p class="eyebrow">The requirement that breaks <span class="pill warn" style="margin-left:8px">inference leak</span></p>
+    <h2>"&lt;4 is hidden" + "managers see everyone below" = anonymity by subtraction.</h2>
+    <div class="attack">
+      <div class="box dept"><div class="b-label">Department</div><div class="b-num">40</div></div>
+      <div class="op">=</div>
+      <div class="box visible"><div class="b-label">Team A</div><div class="b-num">12</div></div>
+      <div class="op">+</div>
+      <div class="box visible"><div class="b-label">Team B</div><div class="b-num">15</div></div>
+      <div class="op">+</div>
+      <div class="box visible"><div class="b-label">Team C</div><div class="b-num">10</div></div>
+      <div class="op">+</div>
+      <div class="box hidden"><div class="b-label">Team D</div><div class="b-num">3 🔒</div></div>
+    </div>
+    <p class="leak">40 − 12 − 15 − 10 = <span class="red">3</span> &nbsp;→&nbsp; the "hidden" team is re-identified.</p>
+    <p style="margin-top:18px">The threshold protects nothing if the surrounding numbers are visible. Break this once and you lose the trust the whole tool runs on — and it's a GDPR / works-council exposure. <strong>Fix: layered suppression</strong> — primary (&lt;4), <strong>secondary</strong> (hide a sibling so the remainder can't be isolated), per-question, and cross-dashboard. I implemented all four.</p>
+  </section>
+
+  <!-- 5. LIVE DEMO -->
+  <section class="slide">
+    <p class="eyebrow"><span class="pill demo">Live demo</span></p>
+    <h2>Let me show you the running product.</h2>
+    <div class="two-col">
+      <div>
+        <ul class="clean demo-list">
+          <li><strong>Manager dashboard</strong> — Olivia / Engineering: themes, benchmarks, weighted questions.</li>
+          <li><strong>Suppression in action</strong> — AI Lab &amp; SMB Sales hidden (&lt;4); a sibling secondarily suppressed in Customer Operations.</li>
+          <li><strong>Trends</strong> — movement across cycles, plus the separate monthly eNPS pulse.</li>
+          <li><strong>The cockpit</strong> — "the one thing to act on this cycle."</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Watch for</h3>
+        <p>The team-of-3 <strong>CX Research Pod</strong> rolls up into a ~40-person department: the department total stays visible, the pod's breakdown is hidden, and one sibling is suppressed so the pod can't be recovered by subtraction — exactly the leak from the previous slide, closed.</p>
+        <a class="tag tag-link" href="/login">▶ switch to the live demo now</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6. ORG MODEL -->
+  <section class="slide">
+    <p class="eyebrow">Design · org structure</p>
+    <h2>Org changes don't rewrite history — because history is frozen at the snapshot.</h2>
+    <div class="timeline">
+      <div class="tl-step"><div class="when">Each cycle</div><div class="what">pins an <strong>org snapshot</strong> — the structure at that moment. Reorgs create a new snapshot; old ones are never mutated.</div></div>
+      <div class="tl-step"><div class="when">Identity</div><div class="what">a stable <strong>external_key</strong> tracks the same business unit across snapshots, so a renamed/moved team keeps one continuous trend line.</div></div>
+      <div class="tl-step"><div class="when">Attribution vs access</div><div class="what">responses are tagged with the org unit <strong>at submission time</strong> (frozen); <strong>who can view</strong> is resolved against the <em>current</em> org.</div></div>
+    </div>
+    <p>That split is the whole answer to "people move, managers change, teams restructure": the numbers a manager saw last cycle never silently change, and access still follows today's reporting lines.</p>
+  </section>
+
+  <!-- 7. ANONYMISATION EDGE CASE -->
+  <section class="slide">
+    <p class="eyebrow">Design · anonymisation in practice</p>
+    <h2>A team of 3 inside a department of 40 — what does the manager see?</h2>
+    <div class="grid cols-2">
+      <div class="card">
+        <h3>What's shown</h3>
+        <p>The <strong>department rollup is visible</strong> (40 ≥ 4). The <strong>team-of-3 breakdown is hidden</strong>. If hiding it alone would let you back it out, the <strong>smallest sibling is also suppressed</strong> — repeated to a fixpoint up the tree.</p>
+      </div>
+      <div class="card">
+        <h3>And the corners</h3>
+        <p>Suppression runs <strong>per question</strong> (not just per team), and a viewer's broad scope <strong>masks the same teams when they drill in</strong> — so navigating deeper can't reopen the subtraction attack. Counts are never shown for hidden groups.</p>
+      </div>
+    </div>
+    <p style="margin-top:18px">Note the tension with ~70% response: a 5-person team often lands at 3 respondents and disappears. That's correct for privacy, but it's why the rollup-stays-visible behaviour matters for adoption.</p>
+  </section>
+
+  <!-- 8. STORAGE / PRIVACY BOUNDARY -->
+  <section class="slide">
+    <p class="eyebrow">Design · storage &amp; the privacy boundary</p>
+    <h2>Identity and answers are stored on opposite sides of a wall.</h2>
+    <div class="grid cols-2">
+      <div class="card" style="border-left:4px solid var(--accent)">
+        <h3>Participant record (who)</h3>
+        <p>SSO-authenticated employee, eligibility, org snapshot unit, submitted / not-submitted. Used for access, eligibility, and duplicate prevention.</p>
+      </div>
+      <div class="card" style="border-left:4px solid var(--c-health)">
+        <h3>Response record (what)</h3>
+        <p>Anonymous answers only — <strong>no employee id, email, name, SSO subject, or participant id</strong>, and only a coarse submission <strong>month</strong>, never a precise timestamp.</p>
+      </div>
+    </div>
+    <p style="margin-top:18px">Managers read <strong>privacy-safe aggregates only</strong>, through a layer that applies suppression before anything reaches a template. The raw answer is never joinable back to a person.</p>
+  </section>
+
+  <!-- 9. TRENDS -->
+  <section class="slide">
+    <p class="eyebrow">Design · trends, not snapshots</p>
+    <h2>Movement is the product — not a single score.</h2>
+    <ul class="clean">
+      <li><strong>Weighted category scores</strong> — each theme is a weighted mean of its questions, so the questions that matter most count for more.</li>
+      <li><strong>Movement across cycles</strong> — every theme shows its delta vs the previous cycle, with the biggest mover surfaced.</li>
+      <li><strong>Company benchmark</strong> — each theme compared to the org-wide average, so a manager knows what's local vs systemic.</li>
+      <li><strong>eNPS as its own cadence</strong> — a continuous monthly pulse on a −100…100 scale, trended separately from the half-year themes.</li>
+    </ul>
+  </section>
+
+  <!-- 10. SIMPLE = USED -->
+  <section class="slide">
+    <p class="eyebrow">Design · simple enough to use</p>
+    <h2>One screen answers "what do I do with this?"</h2>
+    <div class="two-col">
+      <div>
+        <ul class="clean">
+          <li><strong>The cockpit</strong> — a priority-weighted focus area: the one theme to raise in the next team conversation, framed as a prompt, not a verdict.</li>
+          <li><strong>Role-aware navigation</strong> — employee, manager, and P&amp;C admin each land where they can act.</li>
+          <li><strong>Honest about privacy</strong> — every dashboard says what's hidden and why, so a manager trusts what they're seeing.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>My stance on Q1</h3>
+        <p>Ship the <strong>insight layer</strong> first with <strong>one opinionated action</strong> per cycle. Add tracking/action-plans only once managers ask — heavy workflow is what kills adoption. "Simple" is a feature, not a cut corner.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 11. DEMO -> PRODUCTION + AI -->
+  <section class="slide">
+    <p class="eyebrow">From demo to production</p>
+    <h2>The demo proves the model; production hardens it — and adds the AI layer.</h2>
+    <div class="grid cols-2">
+      <div class="card">
+        <h3>Platform</h3>
+        <p>Today: FastAPI + SQLite, deterministic seed. Production: API Gateway + Lambda, Aurora PostgreSQL as source of truth; DynamoDB only later as a published-results cache if read traffic justifies it., Entra ID / OIDC SSO, suppression <strong>materialised at cycle close</strong>, effective-dated org from the HRIS.</p>
+      </div>
+      <div class="card" style="border-left:4px solid var(--c-enps)">
+        <h3>Where AI fits</h3>
+        <p>Summarise open-text comments into themes, suggest the focus area, and draft <strong>manager talking points</strong> — all computed <strong>over already-suppressed aggregates</strong>, so the privacy boundary holds for the model too.</p>
+      </div>
+    </div>
+    <p style="margin-top:16px">The rule-based cockpit today is the honest seam where an LLM slots in next — same inputs, richer output.</p>
+  </section>
+
+  <!-- 12. OPEN DECISIONS -->
+  <section class="slide">
+    <p class="eyebrow">What I'd confirm, and where I'd take it</p>
+    <h2>My defaults — ready to flex on your answers.</h2>
+    <div class="grid cols-3">
+      <div class="card">
+        <h3>Manager action</h3>
+        <p>Default: <strong>insight + one action</strong>. Flex: stage in lightweight tracking ("did the score move?") before full workflow.</p>
+      </div>
+      <div class="card">
+        <h3>History on move</h3>
+        <p>Default: <strong>team history travels</strong> (continuous line); <strong>department rollups stay frozen</strong> per cycle, so old totals never change.</p>
+      </div>
+      <div class="card">
+        <h3>Tree vs matrix</h3>
+        <p>Default: <strong>one primary path for attribution</strong> (keeps anonymity sound); matrix relationships layered on as <strong>view-grants</strong>.</p>
+      </div>
+    </div>
+    <p style="margin-top:18px">Roadmap: action tracking if wanted · matrix as view-grants · suppression materialised at cycle close · HRIS-driven effective-dated org.</p>
+  </section>
+
+  <!-- 13. CLOSE -->
+  <section class="slide title-slide">
+    <p class="eyebrow"><span class="brand-dot"></span>To recap</p>
+    <h1>Owned. Anonymity that holds. Org-aware. Trend-first. Simple.</h1>
+    <p class="sub">A platform Voyado controls, where the &lt;4 promise survives inference, reorgs never rewrite history, and managers get one clear thing to act on each cycle.</p>
+    <div class="byline">Thank you — happy to dig into any corner of the design or the code.</div>
+    <div class="footer-meta">Live demo + source ready · David Trajcev</div>
+  </section>
+
+</div>
+
+<div class="counter" id="counter">1 / 13</div>
+<div class="hint">← → or Space to navigate · F for fullscreen</div>
+
+<script>
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const progress = document.getElementById('progress');
+  const counter = document.getElementById('counter');
+  let i = 0;
+
+  function clampFromHash() {
+    const h = parseInt(location.hash.replace('#', ''), 10);
+    if (!isNaN(h) && h >= 1 && h <= slides.length) i = h - 1;
+  }
+  function render() {
+    slides.forEach((s, n) => s.classList.toggle('active', n === i));
+    progress.style.width = ((i + 1) / slides.length * 100) + '%';
+    counter.textContent = (i + 1) + ' / ' + slides.length;
+    history.replaceState(null, '', '#' + (i + 1));
+  }
+  function go(n) { i = Math.max(0, Math.min(slides.length - 1, n)); render(); }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); go(i + 1); }
+    else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); go(i - 1); }
+    else if (e.key === 'Home') go(0);
+    else if (e.key === 'End') go(slides.length - 1);
+    else if (e.key.toLowerCase() === 'f') {
+      if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
+      else document.exitFullscreen?.();
+    }
+  });
+  document.getElementById('deck').addEventListener('click', (e) => {
+    // click right half = next, left half = prev (ignore clicks on links)
+    if (e.target.closest('a')) return;
+    const mid = window.innerWidth / 2;
+    go(e.clientX > mid ? i + 1 : i - 1);
+  });
+
+  clampFromHash();
+  render();
+</script>
+</body>
+</html>

@@ -164,6 +164,7 @@ ENPS_ORG_ADJUSTMENT = {
 # visible so Engineering keeps a clean team comparison. Shared across all cycles
 # (the cx_research_pod entry is only used in snapshots that include that team).
 RESPONSE_TARGETS = {
+    "company": 1,              # 1 of 1   (CIO)
     "engineering": 1,          # 1 of 1   (manager)
     "platform": 4,             # 4 of 6   67%
     "data": 4,                 # 4 of 5   80%
@@ -187,6 +188,9 @@ PC_ADMIN_CODES = {"E100"}
 EMPLOYEES = [
     # People & Culture (pure admin, not in any org unit)
     ("E100", "Petra Lindqvist", "petra@example.com", False),
+
+    # CIO — owns the company root, so the whole org rolls up to them.
+    ("E200", "Magnus Ahlberg", "magnus@example.com", True),
 
     # Senior managers
     ("E001", "Olivia Ivkovic", "olivia@example.com", True),
@@ -326,7 +330,8 @@ def create_org_snapshot(
         units[external_key] = unit
         return unit
 
-    add_unit("company", "Company", None, None)
+    # The CIO owns the company root; every department rolls up into this dashboard.
+    add_unit("company", "Company", None, "E200")
 
     add_unit("engineering", "Engineering", "company", "E001")
     add_unit("platform", "Platform Team", "engineering", "E003")
@@ -355,6 +360,7 @@ def create_org_snapshot(
         add_unit("cx_research_pod", "CX Research Pod", "customer_operations", "E032")
 
     memberships = {
+        "company": ["E200"],
         "engineering": ["E001"],
         "sales": ["E002"],
 
@@ -828,6 +834,7 @@ def seed():
         print("Seed complete.")
         print()
         print("Demo managers:")
+        print("- Magnus Ahlberg (CIO) manages the whole company (all departments roll up)")
         print("- Olivia Ivkovic manages Engineering")
         print("- Alex Berg manages Platform Team")
         print("- Priya Shah manages Data Team")

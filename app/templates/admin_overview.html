@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="card">
+    <div class="page-heading">
+        <div>
+            <p class="eyebrow">People & Culture</p>
+            <h2>Survey administration</h2>
+            <p>
+                Lightweight admin view for creating survey cycles, publishing them to eligible employees,
+                and monitoring response rates.
+            </p>
+        </div>
+        <div class="header-actions">
+            <a class="button-link" href="/admin/surveys/new">Create survey cycle</a>
+        </div>
+    </div>
+
+    <div class="policy-banner sso-explainer">
+        <div>
+            <h3>Why this is intentionally small</h3>
+            <p>
+                For the case demo, the core value is privacy-safe reporting, org snapshots, and trends.
+                This admin page proves the lifecycle without turning the demo into a full survey-builder clone.
+            </p>
+        </div>
+        <div>
+            <h3>Production integration point</h3>
+            <p>
+                In production, publishing would use an imported org snapshot from the authoritative people source
+                and notify eligible employees through Slack, email, or an internal portal.
+            </p>
+        </div>
+    </div>
+</section>
+
+<section class="card section-card">
+    <div class="section-title-row">
+        <div>
+            <p class="eyebrow">Lifecycle</p>
+            <h2>Survey cycles</h2>
+        </div>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Survey</th>
+                <th>Status</th>
+                <th>Type</th>
+                <th>Org snapshot</th>
+                <th>Window</th>
+                <th>Response rate</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in survey_rows %}
+                <tr>
+                    <td>
+                        <strong>{{ row.cycle.name }}</strong><br>
+                        <span class="muted-cell">{{ row.question_count }} questions</span>
+                    </td>
+                    <td>
+                        <span class="status-pill {{ row.cycle.status }}">{{ row.cycle.status }}</span>
+                    </td>
+                    <td>{{ row.cycle.cycle_type.replace('_', ' ') }}</td>
+                    <td>{{ row.cycle.org_snapshot.name }}</td>
+                    <td>{{ row.cycle.starts_on }} → {{ row.cycle.ends_on }}</td>
+                    <td>
+                        {% if row.response_rate is not none %}
+                            <strong>{{ row.response_rate }}%</strong><br>
+                            <span class="muted-cell">{{ row.submitted_count }} / {{ row.participant_count }} submitted</span>
+                        {% else %}
+                            <span class="muted-cell">Not published</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a class="button-link table-action" href="/admin/surveys/{{ row.cycle.id }}">Open</a>
+                    </td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+
+<section class="card section-card">
+    <p class="eyebrow">Presentation talking points</p>
+    <h2>What this admin scope proves</h2>
+    <ul class="talking-points">
+        <li>P&amp;C can create annual, half-year, or eNPS pulse cycles.</li>
+        <li>Each cycle is tied to one org snapshot, which protects historical reporting.</li>
+        <li>Publishing creates one participant eligibility record per employee in that snapshot.</li>
+        <li>Responses still stay anonymous because participant identity is not stored on response submissions.</li>
+        <li>Full drag-and-drop survey building is deliberately out of MVP scope.</li>
+    </ul>
+</section>
+{% endblock %}

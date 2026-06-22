@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="card survey-card">
+    <div class="page-heading">
+        <div>
+            <p class="eyebrow">Employee survey</p>
+            <h2>{{ participant.survey_cycle.name }}</h2>
+            <p>
+                Signed in as {{ current_user.full_name }}. Your login confirms eligibility and prevents duplicate submissions.
+            </p>
+        </div>
+        <div class="header-actions">
+            <a class="button-link secondary" href="/employee">Back to my surveys</a>
+        </div>
+    </div>
+
+    <div class="policy-banner">
+        <div>
+            <strong>SSO is used for access only</strong>
+            <p>
+                The app uses your company identity to verify that you are eligible for this survey
+                and to make sure you only submit once.
+            </p>
+        </div>
+        <div>
+            <strong>Your response is stored anonymously</strong>
+            <p>
+                The response record does not store your employee id, email, name, SSO subject,
+                or participant id. Reporting only uses aggregated results.
+            </p>
+        </div>
+    </div>
+
+    <section class="section-card compact-meta">
+        <h3>Survey context</h3>
+        <div class="meta-grid">
+            <div>
+                <span>Org snapshot unit</span>
+                <strong>{{ org_unit_path }}</strong>
+            </div>
+            <div>
+                <span>Survey period</span>
+                <strong>{{ participant.survey_cycle.starts_on }} → {{ participant.survey_cycle.ends_on }}</strong>
+            </div>
+            <div>
+                <span>Duplicate prevention</span>
+                <strong>One submission per eligible participant</strong>
+            </div>
+        </div>
+    </section>
+
+    {% if participant.has_submitted %}
+        <section class="section-card submitted-state">
+            <h3>Already submitted</h3>
+            <p>
+                This survey has already been submitted from your participant record.
+                The anonymous response itself is not linked back to this page.
+            </p>
+            <a class="button-link" href="/employee">Return to my surveys</a>
+        </section>
+    {% elif availability == "upcoming" %}
+        <section class="section-card submitted-state">
+            <h3>This survey isn't open yet</h3>
+            <p>
+                This survey cycle opens on {{ participant.survey_cycle.starts_on }}.
+                You'll be able to submit a response once the survey period begins.
+            </p>
+            <a class="button-link" href="/employee">Return to my surveys</a>
+        </section>
+    {% elif not can_submit %}
+        <section class="section-card submitted-state">
+            <h3>This survey is closed</h3>
+            <p>
+                This survey cycle is closed and is shown here for reference only.
+                Closed cycles can no longer accept submissions.
+            </p>
+            <a class="button-link" href="/employee">Return to my surveys</a>
+        </section>
+    {% else %}
+        <form method="post" class="survey-form">
+            {% for question in questions %}
+                <fieldset class="question-block">
+                    <legend>
+                        <span class="question-category">{{ question.category }}</span>
+                        {{ question.text }}
+                    </legend>
+
+                    {% if question.response_type == "likert_1_5" %}
+                        <div class="rating-row likert-row">
+                            {% for value in [1, 2, 3, 4, 5] %}
+                                <label>
+                                    <input type="radio" name="question_{{ question.id }}" value="{{ value }}" required>
+                                    <span>{{ value }}</span>
+                                </label>
+                            {% endfor %}
+                        </div>
+                        <div class="scale-hint">
+                            <span>Strongly disagree</span>
+                            <span>Strongly agree</span>
+                        </div>
+                    {% elif question.response_type == "enps_0_10" %}
+                        <div class="rating-row enps-row">
+                            {% for value in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10] %}
+                                <label>
+                                    <input type="radio" name="question_{{ question.id }}" value="{{ value }}" required>
+                                    <span>{{ value }}</span>
+                                </label>
+                            {% endfor %}
+                        </div>
+                        <div class="scale-hint">
+                            <span>Not likely</span>
+                            <span>Very likely</span>
+                        </div>
+                    {% else %}
+                        <textarea name="question_{{ question.id }}" rows="4"></textarea>
+                    {% endif %}
+                </fieldset>
+            {% endfor %}
+
+            <div class="submit-panel">
+                <div>
+                    <strong>Before submitting</strong>
+                    <p>
+                        Managers will only see aggregated results that pass the anonymity threshold.
+                        Small groups are hidden from breakdown views.
+                    </p>
+                </div>
+                <button type="submit">Submit anonymous response</button>
+            </div>
+        </form>
+    {% endif %}
+</section>
+{% endblock %}

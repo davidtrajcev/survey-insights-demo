@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="card">
+    <div class="page-heading">
+        <div>
+            <p class="eyebrow">Mock SSO</p>
+            <h2>Sign in with company SSO</h2>
+            <p>
+                In production this button would redirect to Entra ID / OIDC.
+                For the demo, choose a seeded identity so the app can behave as if that person signed in.
+            </p>
+        </div>
+    </div>
+
+    <div class="policy-banner sso-explainer">
+        <div>
+            <strong>What SSO is used for</strong>
+            <p>
+                Authentication, survey eligibility, duplicate-submission prevention,
+                and manager dashboard access.
+            </p>
+        </div>
+        <div>
+            <strong>What SSO is not used for</strong>
+            <p>
+                The signed-in identity is not stored on anonymous response rows and is not used in manager reporting.
+            </p>
+        </div>
+    </div>
+
+    <h3>Recommended demo identities</h3>
+    <div class="login-grid">
+        {% for user in featured_users %}
+        <form method="post" action="/login" class="login-card">
+            <input type="hidden" name="employee_id" value="{{ user.id }}">
+            <strong>{{ user.full_name }}</strong>
+            <span>{{ "Manager" if user.is_manager else "Employee" }} · {{ user.email }}</span>
+            <button type="submit">Continue as {{ user.full_name.split(" ")[0] }}</button>
+        </form>
+        {% endfor %}
+    </div>
+
+    <div class="two-column-section">
+        <div>
+            <h3>Managers</h3>
+            <div class="compact-list">
+                {% for manager in managers %}
+                <form method="post" action="/login">
+                    <input type="hidden" name="employee_id" value="{{ manager.id }}">
+                    <button type="submit">{{ manager.full_name }}</button>
+                </form>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div>
+            <h3>Employees</h3>
+            <div class="compact-list">
+                {% for employee in employees %}
+                <form method="post" action="/login">
+                    <input type="hidden" name="employee_id" value="{{ employee.id }}">
+                    <button type="submit">{{ employee.full_name }}</button>
+                </form>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

@@ -1,0 +1,808 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="dashboard-header">
+    <div>
+        <p class="eyebrow">Manager dashboard</p>
+        <h2>{{ manager.full_name }}</h2>
+        <p>
+            Scope shown: {{ report.manager_scope.root_org_unit_path }} ·
+            Survey: {{ selected_cycle.name }} ·
+            Historical snapshot: {{ report.survey_cycle.org_snapshot }}
+        </p>
+        {% if response_rate %}
+        <p class="response-rate">
+            {% if response_rate.visible %}
+                <span class="rr-pill">{{ response_rate.responded }} of {{ response_rate.eligible }} responded</span>
+                <span class="rr-rate">{{ response_rate.rate }}% response rate</span>
+            {% else %}
+                <span class="rr-pill">Fewer than 4 of {{ response_rate.eligible }} responded</span>
+            {% endif %}
+        </p>
+        {% endif %}
+        <p class="muted-text">
+            Current access scope: {{ viewer_org_unit_path }} ·
+            Target manager's current scope: {{ current_target_org_unit_path }}
+        </p>
+    </div>
+
+    <form class="selector-form" method="get" action="/manager/{{ manager.public_id }}">
+        <label for="cycle_id">Survey cycle</label>
+        <select id="cycle_id" name="cycle_id" onchange="this.form.submit()">
+            {% for cycle in cycles %}
+            <option value="{{ cycle.id }}" {% if cycle.id == selected_cycle.id %}selected{% endif %}>
+                {{ cycle.name }}
+            </option>
+            {% endfor %}
+        </select>
+    </form>
+</section>
+
+<section class="policy-banner">
+    <div>
+        <strong>Anonymity rule</strong>
+        <p>
+            Results are shown only when at least
+            {{ report.privacy_policy.minimum_respondents }} people responded.
+            Hidden and secondarily suppressed rows do not expose exact counts.
+        </p>
+    </div>
+    <div>
+        <strong>Identity model</strong>
+        <p>{{ report.privacy_policy.identity_model }}</p>
+    </div>
+
+</section>
+
+<section class="card section-card manager-cockpit-card">
+    <div class="cockpit-header">
+        <div>
+            <p class="eyebrow">Manager cockpit</p>
+            <h3>What to act on this cycle</h3>
+            <p>Designed for a quick read before a team meeting: focus area, movement, and what is hidden for privacy.</p>
+        </div>
+        <div class="read-time-badge">
+            <strong>60 sec</strong>
+            <span>manager read</span>
+        </div>
+    </div>
+
+    <div class="cockpit-layout">
+        <div class="focus-panel">
+            <div class="focus-kicker">Focus first{% if manager_summary.top_concern and manager_summary.top_concern.priority_weight and manager_summary.top_concern.priority_weight > 1 %} · priority-weighted ×{{ manager_summary.top_concern.priority_weight }}{% endif %}</div>
+            {% if manager_summary.top_concern %}
+                <h3>{{ manager_summary.top_concern.category }}</h3>
+                <p class="focus-copy">
+                    This is the lowest visible area in the current cycle. Use it as the first conversation topic, not as a judgement.
+                </p>
+                <div class="focus-score-row">
+                    <div>
+                        <span>Current score</span>
+                        <strong>{{ manager_summary.top_concern.value }}</strong><small>/5</small>
+                    </div>
+                    {% if manager_summary.biggest_drop and manager_summary.biggest_drop.category == manager_summary.top_concern.category %}
+                        <div class="change-badge negative">{{ manager_summary.biggest_drop.delta_label }} since last cycle</div>
+                    {% elif manager_summary.biggest_improvement and manager_summary.biggest_improvement.category == manager_summary.top_concern.category %}
+                        <div class="change-badge positive">{{ manager_summary.biggest_improvement.delta_label }} since last cycle</div>
+                    {% else %}
+                        <div class="change-badge neutral">current focus</div>
+                    {% endif %}
+                </div>
+                <div class="focus-meter-track">
+                    <div class="focus-meter-fill" style="width: {{ manager_summary.top_concern.value * 20 }}%"></div>
+                </div>
+                <div class="focus-scale">
+                    <span>Low</span>
+                    <span>Good</span>
+                </div>
+                {% set focus_cmp = company_comparison.categories.get(manager_summary.top_concern.category) if company_comparison else None %}
+                {% if focus_cmp %}
+                <p class="focus-benchmark {{ focus_cmp.direction }}">
+                    {% if focus_cmp.direction == "below" %}
+                        {{ focus_cmp.delta_label | replace('-', '') }} below the {{ company_comparison.company_name | lower }} average ({{ focus_cmp.benchmark }}) — this is where you trail the wider company most.
+                    {% elif focus_cmp.direction == "above" %}
+                        {{ focus_cmp.delta_label }} above the {{ company_comparison.company_name | lower }} average ({{ focus_cmp.benchmark }}), but still your lowest visible area.
+                    {% else %}
+                        In line with the {{ company_comparison.company_name | lower }} average ({{ focus_cmp.benchmark }}).
+                    {% endif %}
+                </p>
+                {% endif %}
+            {% else %}
+                <h3>Not enough visible data</h3>
+                <p class="focus-copy">The current scope is hidden by the anonymity threshold.</p>
+            {% endif %}
+        </div>
+
+        <div class="insight-rail">
+            <div class="insight-tile strength">
+                <div class="tile-icon">★</div>
+                <div>
+                    <span>Strongest area</span>
+                    {% if manager_summary.strongest_area %}
+                        <strong>{{ manager_summary.strongest_area.category }}</strong>
+                        <small>{{ manager_summary.strongest_area.value }}/5 — preserve what is working.</small>
+                    {% else %}
+                        <strong>Hidden</strong>
+                        <small>Not enough visible data.</small>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="insight-tile movement">
+                <div class="tile-icon">↗</div>
+                <div>
+                    <span>Biggest movement</span>
+                    {% if manager_summary.biggest_drop and manager_summary.biggest_drop.delta < 0 %}
+                        <strong>{{ manager_summary.biggest_drop.category }}</strong>
+                        <small>{{ manager_summary.biggest_drop.delta_label }} · {{ manager_summary.biggest_drop.status }}</small>
+                    {% elif manager_summary.biggest_improvement %}
+                        <strong>{{ manager_summary.biggest_improvement.category }}</strong>
+                        <small>{{ manager_summary.biggest_improvement.delta_label }} · {{ manager_summary.biggest_improvement.status }}</small>
+                    {% else %}
+                        <strong>Stable</strong>
+                        <small>No comparable previous cycle yet.</small>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="insight-tile privacy">
+                <div class="tile-icon">🔒</div>
+                <div>
+                    <span>Privacy impact</span>
+                    <strong>{{ manager_summary.hidden_unit_count }} hidden</strong>
+                    <small>{{ manager_summary.threshold_hidden_unit_count }} below threshold · {{ manager_summary.secondary_hidden_unit_count }} secondary</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="next-conversation-panel">
+        <div class="conversation-lead">
+            <p class="eyebrow">Next team conversation</p>
+            <h4>{{ manager_summary.suggested_prompt_category }}</h4>
+            <p>Use these as facilitation prompts. The dashboard points to a topic; the team discussion creates the action.</p>
+        </div>
+        <div class="prompt-chip-list">
+            {% for prompt in manager_summary.suggested_prompts %}
+            <div class="prompt-chip">
+                <span>{{ loop.index }}</span>
+                <p>{{ prompt }}</p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</section>
+
+<section class="score-grid">
+    {% for score in report.overall_rollup.category_scores %}
+    {% set cmp = company_comparison.categories.get(score.category) if company_comparison else None %}
+    <div class="score-card cat-{{ score.category | lower }}">
+        <span>{{ score.category }}</span>
+        {% if score.visible %}
+            <strong>{{ score.average_score }}</strong>
+            <small>Average score · {{ score.respondent_count }} responses</small>
+            {% if cmp %}
+            <div class="benchmark {{ cmp.direction }}">
+                <span class="bm-text">vs {{ company_comparison.company_name | lower }} {{ cmp.benchmark }}</span>
+                <strong class="bm-delta">{{ cmp.delta_label }}</strong>
+            </div>
+            {% endif %}
+            {% set breakdown = question_breakdown.get(score.category) if question_breakdown else None %}
+            {% if breakdown and breakdown | length > 1 %}
+            <details class="score-breakdown">
+                <summary>{{ breakdown | length }} questions, weighted</summary>
+                <ul>
+                    {% for q in breakdown %}
+                    <li class="{% if not q.visible %}hidden-q{% elif q.weight > 1 %}heavy{% endif %}">
+                        <span class="q-text">{{ q.text }}</span>
+                        <span class="q-meta">{% if q.visible %}{{ q.average_score }}{% else %}{{ q.respondent_count_label }}{% endif %}<em>{{ q.weight_label }}</em></span>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </details>
+            {% endif %}
+        {% else %}
+            <strong>Hidden</strong>
+            <small>{{ score.reason }}</small>
+        {% endif %}
+    </div>
+    {% endfor %}
+
+    {# eNPS is a continuous monthly pulse — show the pulse closest to the selected cycle's date. #}
+    {% if enps_pulse_card %}
+    <div class="score-card cat-enps">
+        <span>eNPS · pulse</span>
+        {% if enps_pulse_card.visible %}
+            <strong>{{ enps_pulse_card.enps_score }}</strong>
+            <small>Net score (−100 to 100) · pulse {{ enps_pulse_card.survey_cycle_name | replace('eNPS Pulse ', '') }}</small>
+            {% if enps_pulse_comparison %}
+            <div class="benchmark {{ enps_pulse_comparison.direction }}">
+                <span class="bm-text">vs {{ enps_pulse_comparison.company_name | lower }} {{ enps_pulse_comparison.benchmark }}</span>
+                <strong class="bm-delta">{{ enps_pulse_comparison.delta_label }}</strong>
+            </div>
+            {% endif %}
+        {% else %}
+            <strong>Hidden</strong>
+            <small>{{ enps_pulse_card.reason }}</small>
+        {% endif %}
+    </div>
+    {% endif %}
+
+</section>
+
+<section class="card section-card">
+    <div class="section-title-row">
+        <div>
+            <h3>Visual overview</h3>
+            <p>Extra visualisation for quick manager understanding without exposing direct-only or raw data.</p>
+        </div>
+    </div>
+
+    <div class="visual-grid">
+        <div class="mini-chart-card">
+            <h4>Current 1–5 scores</h4>
+            <p>Overall visible rollup for this scope.</p>
+            <div class="mini-chart-wrapper"><canvas id="currentScoresChart"></canvas></div>
+        </div>
+
+        <div class="mini-chart-card">
+            {% if has_comparable_children %}
+                <h4>Team comparison</h4>
+                <p>Immediate child teams for the focus category.</p>
+                <div class="mini-chart-wrapper"><canvas id="teamComparisonChart"></canvas></div>
+            {% else %}
+                <h4>Lowest-scoring questions</h4>
+                <p>Where to focus first, across all themes.</p>
+                {% if lowest_questions_chart_data.labels %}
+                    <div class="mini-chart-wrapper"><canvas id="lowestQuestionsChart"></canvas></div>
+                {% else %}
+                    <p class="muted-text">Not enough visible responses to break down by question.</p>
+                {% endif %}
+            {% endif %}
+        </div>
+
+        <div class="mini-chart-card">
+            <h4>Response rate</h4>
+            {% if response_rate and response_rate.visible %}
+                <p>{{ response_rate.responded }} of {{ response_rate.eligible }} responded · {{ response_rate.rate }}%</p>
+                <div class="mini-chart-wrapper"><canvas id="responseRateChart"></canvas></div>
+            {% else %}
+                <p>Response rate for this scope.</p>
+                <p class="muted-text">Fewer than 4 responses — withheld.</p>
+            {% endif %}
+        </div>
+    </div>
+</section>
+
+<section class="card section-card">
+    <div class="section-title-row">
+        <div>
+            <h3>Trend over time</h3>
+            <p>Movement across survey cycles, using each cycle's org snapshot.</p>
+        </div>
+    </div>
+
+
+    <div class="trend-status-row">
+        {% for movement in manager_summary.movements %}
+        <div class="trend-status-pill cat-{{ movement.category | lower }} {{ movement.status | lower | replace(' ', '-') }}">
+            <span>{{ movement.category }}</span>
+            <strong>{{ movement.status }}</strong>
+            <small>{{ movement.delta_label }}</small>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="trend-split">
+        <div class="trend-likert">
+            <h4 class="chart-label">Theme scores · 1–5</h4>
+            <div class="chart-wrapper">
+                <canvas id="trendChart"></canvas>
+            </div>
+        </div>
+        <div class="trend-enps">
+            <h4 class="chart-label">eNPS · monthly pulse (−100 to 100)</h4>
+            <div class="chart-wrapper chart-wrapper-enps">
+                <canvas id="enpsTrendChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class="trend-table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Cycle</th>
+                    <th>Scope</th>
+                    <th>Responses</th>
+                    <th>Health</th>
+                    <th>Workload</th>
+                    <th>Leadership</th>
+                    <th>Collaboration</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in trends %}
+                <tr>
+                    <td>{{ row.survey_cycle_name }}</td>
+                    <td>{{ row.root_org_unit_name }}</td>
+                    {% if row.visible %}
+                        <td>{{ row.respondent_count }}</td>
+                        {% for category in ["Health", "Workload", "Leadership", "Collaboration"] %}
+                            {% set score = namespace(value="—") %}
+                            {% for item in row.category_scores %}
+                                {% if item.category == category and item.visible %}
+                                    {% set score.value = item.average_score %}
+                                {% endif %}
+                            {% endfor %}
+                            <td>{{ score.value }}</td>
+                        {% endfor %}
+                    {% else %}
+                        <td>{{ row.respondent_count_label }}</td>
+                        <td colspan="4" class="muted-cell">{{ row.reason }}</td>
+                    {% endif %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="card section-card">
+    <div class="section-title-row">
+        <div>
+            <h3>Org tree results</h3>
+            <p>Managers see their org unit and all child units, after privacy suppression.</p>
+        </div>
+        <button type="button" class="tree-alltoggle" id="orgTreeAllToggle" hidden>Expand all</button>
+    </div>
+
+    <table id="orgTreeTable">
+        <thead>
+            <tr>
+                <th>Org unit</th>
+                <th>Responses</th>
+                <th>Health</th>
+                <th>Workload</th>
+                <th>Leadership</th>
+                <th>Collaboration</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for unit in report.org_units %}
+            <tr class="org-row {% if not unit.visible %}hidden-row{% endif %}" data-depth="{{ unit.depth }}">
+                <td style="padding-left: {{ 16 + (unit.depth * 24) }}px">
+                    <span class="tree-toggle" aria-hidden="true"></span>
+                    {% if unit.depth > 0 %}<span class="tree-marker">↳</span>{% endif %}
+                    {% if unit.depth > 0 and unit.manager_employee_id %}
+                        <a class="org-link" href="/manager/{{ unit.manager_public_id }}?cycle_id={{ selected_cycle.id }}">{{ unit.org_unit_name }}</a>
+                    {% else %}
+                        {{ unit.org_unit_name }}
+                    {% endif %}
+                </td>
+
+                {% if unit.visible %}
+                    <td>{{ unit.respondent_count }}</td>
+                    {% for category in ["Health", "Workload", "Leadership", "Collaboration"] %}
+                        {% set score = namespace(value="—") %}
+                        {% for item in unit.category_scores %}
+                            {% if item.category == category and item.visible %}
+                                {% set score.value = item.average_score %}
+                            {% endif %}
+                        {% endfor %}
+                        <td>{{ score.value }}</td>
+                    {% endfor %}
+                    <td>
+                        <span class="status-pill visible">Visible</span>
+                        {% if unit.privacy_warnings %}
+                            <span class="warning-dot" title="Inference risk flagged">!</span>
+                        {% endif %}
+                    </td>
+                {% else %}
+                    <td>{{ unit.respondent_count_label }}</td>
+                    <td colspan="4" class="muted-cell">
+                        {{ unit.reason }}
+                        {% if unit.privacy_note %}<br><small>{{ unit.privacy_note }}</small>{% endif %}
+                    </td>
+                    <td>
+                        <span class="status-pill hidden">Hidden</span>
+                        {% if unit.secondary_suppression %}<span class="warning-dot" title="Secondary suppression applied">!</span>{% endif %}
+                    </td>
+                {% endif %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+
+<script>
+    // Make the org-tree table foldable: each parent row gets a caret that
+    // collapses/expands its subtree, and an "Expand all / Collapse all" control.
+    // Folding is depth-based (the rows are a pre-order traversal), so a row is
+    // hidden whenever any of its ancestors is collapsed.
+    (function () {
+        const table = document.getElementById("orgTreeTable");
+        if (!table) return;
+        const rows = Array.from(table.querySelectorAll("tr.org-row"));
+        if (!rows.length) return;
+
+        const depths = rows.map((row) => parseInt(row.dataset.depth, 10) || 0);
+
+        // Nearest preceding row with a smaller depth is the parent.
+        const parents = rows.map(() => -1);
+        for (let i = 0; i < rows.length; i++) {
+            for (let j = i - 1; j >= 0; j--) {
+                if (depths[j] < depths[i]) { parents[i] = j; break; }
+            }
+        }
+        const hasChildren = rows.map((_, i) => i + 1 < rows.length && depths[i + 1] > depths[i]);
+        const collapsed = rows.map(() => false);
+        const allToggle = document.getElementById("orgTreeAllToggle");
+
+        const isHidden = (i) => {
+            for (let p = parents[i]; p !== -1; p = parents[p]) {
+                if (collapsed[p]) return true;
+            }
+            return false;
+        };
+
+        function render() {
+            rows.forEach((row, i) => {
+                row.style.display = isHidden(i) ? "none" : "";
+                if (hasChildren[i]) {
+                    row.querySelector(".tree-toggle").textContent = collapsed[i] ? "▸" : "▾";
+                }
+            });
+            if (allToggle) {
+                const anyCollapsed = collapsed.some((c, i) => c && hasChildren[i]);
+                allToggle.textContent = anyCollapsed ? "Expand all" : "Collapse all";
+            }
+        }
+
+        rows.forEach((row, i) => {
+            if (!hasChildren[i]) return;
+            // The whole parent row is the toggle target (the caret is just an
+            // indicator); a click on the team-name link still navigates.
+            row.classList.add("is-foldable");
+            row.querySelector(".tree-toggle").classList.add("is-toggle");
+            row.title = "Click to expand / collapse";
+            row.addEventListener("click", (e) => {
+                if (e.target.closest("a")) return;
+                collapsed[i] = !collapsed[i];
+                render();
+            });
+        });
+
+        if (allToggle && hasChildren.some(Boolean)) {
+            allToggle.hidden = false;
+            allToggle.addEventListener("click", () => {
+                const anyCollapsed = collapsed.some((c, i) => c && hasChildren[i]);
+                rows.forEach((_, i) => {
+                    // Expand everything, or collapse to the top two levels (keep the root open).
+                    collapsed[i] = anyCollapsed ? false : (hasChildren[i] && depths[i] >= 1);
+                });
+                render();
+            });
+        }
+
+        // Default to a compact view (top two levels) so it isn't one big table.
+        rows.forEach((_, i) => { if (hasChildren[i] && depths[i] >= 1) collapsed[i] = true; });
+        render();
+    })();
+</script>
+
+{% if report.inference_risks %}
+<section class="risk-box">
+    <h3>Inference risks mitigated</h3>
+    <p>
+        The demo hides small teams and applies secondary suppression when a single hidden child
+        would otherwise be recoverable by subtraction from a visible parent and sibling rows.
+    </p>
+    <ul>
+        {% for risk in report.inference_risks %}
+        <li>
+            <strong>{{ risk.hidden_child_org_unit_name }}</strong> would have been inferable from
+            <strong>{{ risk.parent_org_unit_name }}</strong>. {{ risk.mitigation_applied }}
+        </li>
+        {% endfor %}
+    </ul>
+</section>
+{% endif %}
+
+<section class="card section-card">
+    <h3>Demo talking points</h3>
+    <ul class="talking-points">
+        <li>Access is resolved from the current org, while historical attribution uses the selected survey cycle's org snapshot.</li>
+        <li>SSO/identity is used for eligibility, but manager reporting reads only anonymous aggregated responses.</li>
+        <li>The privacy service sits between raw analytics and the dashboard.</li>
+        <li>Rows with fewer than 4 respondents are hidden, and secondary suppression closes the basic subtraction leak.</li>
+        <li>The manager view stays simple: summary, trends, team breakdown, and suggested conversation prompts.</li>
+    </ul>
+</section>
+
+<!-- Chart.js is vendored locally (app/static/vendor) so the dashboard works offline / behind a blocked CDN. -->
+<script src="/static/vendor/chart.umd.min.js"></script>
+<script>
+    const chartData = {{ chart_data_json | safe }};
+    const enpsChartData = {{ enps_chart_data_json | safe }};
+    const currentScoreChartData = {{ current_score_chart_data_json | safe }};
+    const teamComparisonChartData = {{ team_comparison_chart_data_json | safe }};
+    const lowestQuestionsChartData = {{ lowest_questions_chart_data_json | safe }};
+    const responseRateChartData = {{ response_rate_chart_data_json | safe }};
+
+    // Shared category palette — keeps charts in sync with the KPI cards / pills.
+    const CATEGORY_COLORS = {
+        Health: "#10b981",
+        Workload: "#f59e0b",
+        Leadership: "#8b5cf6",
+        Collaboration: "#0ea5e9",
+        eNPS: "#ec4899",
+    };
+    const STATUS_COLORS = { visible: "#16a34a", hidden: "#dc2626", secondary: "#ea580c" };
+    const hexToRgba = (hex, a) => {
+        const n = parseInt(hex.slice(1), 16);
+        return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+    };
+
+    if (window.Chart) {
+        Chart.defaults.font.family = "Inter, system-ui, sans-serif";
+        Chart.defaults.color = "#475569";
+        Chart.defaults.borderColor = "rgba(148, 163, 184, 0.18)";
+    }
+
+    // Current 1–5 scores: one bar per category, in its category colour.
+    currentScoreChartData.datasets.forEach((ds) => {
+        ds.backgroundColor = currentScoreChartData.labels.map((c) => hexToRgba(CATEGORY_COLORS[c] || "#6366f1", 0.85));
+        ds.borderColor = currentScoreChartData.labels.map((c) => CATEGORY_COLORS[c] || "#6366f1");
+        ds.borderWidth = 1;
+        ds.borderRadius = 8;
+        ds.maxBarThickness = 64;
+    });
+
+    // Team comparison: all bars in the focus category's colour.
+    const focusColor = CATEGORY_COLORS[teamComparisonChartData.focus_category] || "#6366f1";
+    teamComparisonChartData.datasets.forEach((ds) => {
+        ds.backgroundColor = hexToRgba(focusColor, 0.85);
+        ds.borderColor = focusColor;
+        ds.borderWidth = 1;
+        ds.borderRadius = 6;
+        ds.maxBarThickness = 30;
+    });
+
+    // Response-rate doughnut: responded vs no response.
+    responseRateChartData.datasets.forEach((ds) => {
+        ds.backgroundColor = [STATUS_COLORS.visible, "#e6eaf1"];
+        ds.borderWidth = 0;
+        ds.hoverOffset = 6;
+    });
+
+    // Trend lines: one colour per category dataset (Likert chart + eNPS chart).
+    [...chartData.datasets, ...enpsChartData.datasets].forEach((ds) => {
+        const color = CATEGORY_COLORS[ds.label] || "#6366f1";
+        ds.borderColor = color;
+        ds.backgroundColor = hexToRgba(color, 0.12);
+        ds.pointBackgroundColor = color;
+        ds.pointBorderColor = "#ffffff";
+        ds.pointBorderWidth = 1.5;
+        ds.pointRadius = 3.5;
+        ds.pointHoverRadius = 5;
+        ds.borderWidth = 2.5;
+    });
+
+    const currentScoresCtx = document.getElementById("currentScoresChart");
+    if (currentScoresCtx && window.Chart) {
+        new Chart(currentScoresCtx, {
+            type: "bar",
+            data: currentScoreChartData,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    y: {
+                        min: 1,
+                        max: 5,
+                        title: {
+                            display: true,
+                            text: "Score"
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    const teamComparisonCtx = document.getElementById("teamComparisonChart");
+    if (teamComparisonCtx && window.Chart) {
+        const teamManagerIds = teamComparisonChartData.manager_ids || [];
+        const teamCycleId = {{ selected_cycle.id }};
+        const teamDashboardUrl = (index) => {
+            const managerId = teamManagerIds[index];
+            return managerId ? `/manager/${managerId}?cycle_id=${teamCycleId}` : null;
+        };
+        new Chart(teamComparisonCtx, {
+            type: "bar",
+            data: teamComparisonChartData,
+            options: {
+                indexAxis: "y",
+                responsive: true,
+                maintainAspectRatio: false,
+                // Clicking a team bar drills into that team's manager dashboard.
+                onClick: (event, elements) => {
+                    if (!elements.length) return;
+                    const url = teamDashboardUrl(elements[0].index);
+                    if (url) window.location.href = url;
+                },
+                // Show a pointer cursor only over bars that link somewhere.
+                onHover: (event, elements) => {
+                    if (!event.native) return;
+                    const linkable = elements.length && teamDashboardUrl(elements[0].index);
+                    event.native.target.style.cursor = linkable ? "pointer" : "default";
+                },
+                plugins: {
+                    legend: { display: false },
+                    title: {
+                        display: true,
+                        text: teamComparisonChartData.focus_category || "Focus category"
+                    }
+                },
+                scales: {
+                    x: {
+                        min: teamComparisonChartData.focus_category === "eNPS" ? -100 : 1,
+                        max: teamComparisonChartData.focus_category === "eNPS" ? 100 : 5
+                    },
+                    y: {
+                        ticks: {
+                            // Wrap long team names (e.g. "Customer Operations
+                            // Leadership") onto two lines so they aren't clipped.
+                            callback: function (value) {
+                                const label = this.getLabelForValue(value);
+                                if (label.length <= 18) return label;
+                                const words = label.split(" ");
+                                const lines = [];
+                                let line = "";
+                                for (const word of words) {
+                                    if ((line + " " + word).trim().length > 18) {
+                                        if (line) lines.push(line.trim());
+                                        line = word;
+                                    } else {
+                                        line = (line + " " + word).trim();
+                                    }
+                                }
+                                if (line) lines.push(line.trim());
+                                return lines;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    const lowestQuestionsCtx = document.getElementById("lowestQuestionsChart");
+    if (lowestQuestionsCtx && window.Chart) {
+        const qColors = (lowestQuestionsChartData.categories || []).map(
+            (c) => CATEGORY_COLORS[c] || "#6366f1"
+        );
+        lowestQuestionsChartData.datasets.forEach((ds) => {
+            ds.backgroundColor = qColors.map((c) => hexToRgba(c, 0.85));
+            ds.borderColor = qColors;
+            ds.borderWidth = 1;
+            ds.borderRadius = 6;
+            ds.maxBarThickness = 26;
+        });
+        new Chart(lowestQuestionsCtx, {
+            type: "bar",
+            data: lowestQuestionsChartData,
+            options: {
+                indexAxis: "y",
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            title: (items) => lowestQuestionsChartData.full_labels[items[0].dataIndex],
+                            label: (item) => "Score " + item.formattedValue + " · " + lowestQuestionsChartData.categories[item.dataIndex],
+                        },
+                    },
+                },
+                scales: {
+                    x: { min: 1, max: 5, title: { display: true, text: "Score" } },
+                    y: { ticks: { font: { size: 10 }, autoSkip: false } },
+                },
+            },
+        });
+    }
+
+    const responseRateCtx = document.getElementById("responseRateChart");
+    if (responseRateCtx && window.Chart) {
+        new Chart(responseRateCtx, {
+            type: "doughnut",
+            data: responseRateChartData,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: "62%",
+                plugins: {
+                    legend: { position: "bottom" },
+                    tooltip: {
+                        callbacks: {
+                            label: (item) => item.label + ": " + item.formattedValue,
+                        },
+                    },
+                },
+            },
+        });
+    }
+
+    const ctx = document.getElementById("trendChart");
+
+    if (ctx && window.Chart) {
+        new Chart(ctx, {
+            type: "line",
+            data: chartData,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: "index",
+                    intersect: false
+                },
+                plugins: {
+                    legend: {
+                        position: "bottom"
+                    }
+                },
+                scales: {
+                    y: {
+                        min: 1,
+                        max: 5,
+                        title: {
+                            display: true,
+                            text: "1–5 survey score"
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    const enpsCtx = document.getElementById("enpsTrendChart");
+
+    if (enpsCtx && window.Chart) {
+        new Chart(enpsCtx, {
+            type: "line",
+            data: enpsChartData,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: "index",
+                    intersect: false
+                },
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    y: {
+                        min: -100,
+                        max: 100,
+                        title: {
+                            display: true,
+                            text: "eNPS"
+                        },
+                        grid: {
+                            // Emphasise the zero line — the promoter/detractor break-even.
+                            color: (c) => (c.tick.value === 0 ? "rgba(148,163,184,0.55)" : "rgba(148,163,184,0.18)")
+                        }
+                    }
+                }
+            }
+        });
+    }
+</script>
+{% endblock %}

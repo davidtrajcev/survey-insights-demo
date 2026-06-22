@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="card">
+    <div class="page-heading">
+        <div>
+            <p class="eyebrow">Manager access</p>
+            <h2>Accessible manager dashboards</h2>
+            <p>
+                In production, the signed-in manager would come from Entra ID / SSO.
+                This list only shows manager dashboards inside the signed-in user's current org scope.
+                Some descendant dashboards may still be hidden for a specific cycle if opening them would bypass secondary suppression.
+            </p>
+        </div>
+    </div>
+
+    <div class="manager-grid">
+        {% for manager in managers %}
+        <a class="manager-card" href="/manager/{{ manager.public_id }}">
+            <strong>{{ manager.full_name }}</strong>
+            <span>{{ manager.email }}</span>
+        </a>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}

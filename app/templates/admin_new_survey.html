@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="card survey-card">
+    <div class="page-heading">
+        <div>
+            <p class="eyebrow">P&amp;C Admin</p>
+            <h2>Create survey cycle</h2>
+            <p>
+                This creates a draft survey using the standard question set from the case brief.
+                Publishing later creates SSO participant eligibility records.
+            </p>
+        </div>
+        <div class="header-actions">
+            <a class="button-link secondary" href="/admin">Back to admin</a>
+        </div>
+    </div>
+
+    <form class="admin-form" method="post" action="/admin/surveys/new">
+        <label>
+            Survey name
+            <input type="text" name="name" value="eNPS Pulse Demo" required>
+        </label>
+
+        <label>
+            Survey type
+            <select name="cycle_type" required>
+                <option value="annual">Annual</option>
+                <option value="half_year">Half-year</option>
+                <option value="enps_pulse" selected>eNPS pulse</option>
+            </select>
+        </label>
+
+        <div class="form-grid">
+            <label>
+                Starts on
+                <input type="date" name="starts_on" required>
+            </label>
+            <label>
+                Ends on
+                <input type="date" name="ends_on" required>
+            </label>
+        </div>
+
+        <label>
+            Org snapshot
+            <select name="org_snapshot_id" required>
+                {% for snapshot in snapshots %}
+                    <option value="{{ snapshot.id }}">
+                        {{ snapshot.name }} — {{ snapshot.snapshot_date }}
+                    </option>
+                {% endfor %}
+            </select>
+        </label>
+
+        <div class="next-section compact-meta">
+            <h3>Default question set</h3>
+            <p>
+                To keep the demo focused, survey creation uses the standard categories from the brief.
+                A production version could add a full question builder later.
+            </p>
+            <ul>
+                {% for question in default_questions %}
+                    <li><strong>{{ question.category }}:</strong> {{ question.text }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+
+        <div class="submit-panel">
+            <p>
+                Draft creation does not notify employees. Publishing creates participant eligibility records
+                for employees in the selected org snapshot.
+            </p>
+            <button type="submit">Create draft</button>
+        </div>
+    </form>
+</section>
+{% endblock %}
